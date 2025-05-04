@@ -4,6 +4,14 @@
 
 {% block content %}
 <div class="container mt-4">
+    <div class="row mb-4">
+        <div class="col-md-8 mx-auto">
+            {% with search_type='all' %}
+            {% include 'includes/search_box.html' %}
+            {% endwith %}
+        </div>
+    </div>
+
     <h2 class="mb-4">Available Shops</h2>
     
     <div class="row">

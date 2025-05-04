@@ -3,154 +3,237 @@
 {% block title %}Nearby Shops{% endblock %}
 
 {% block content %}
-<div class="row">
-    <div class="col-md-8">
-        <h2>Shops Near You</h2>
-        <div id="map" style="height: 400px; width: 100%; margin: 20px 0;"></div>
-    </div>
-    <div class="col-md-4">
-        <div class="card">
-            <div class="card-body">
-                <h5 class="card-title">Your Location</h5>
-                <p><strong>Address:</strong><br>
-                {{ current_user.address or 'Not set' }}</p>
-                {% if not current_user.location_lat %}
-                <div class="alert alert-warning">
-                    Please update your location in your profile to see nearby shops.
+<div class="container mt-4">
+    <h2>Nearby Shops</h2>
+
+    <!-- Search and Filters -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form class="row g-3" method="GET">
+                <div class="col-md-4">
+                    <label class="form-label">Search Shops</label>
+                    <input type="text" class="form-control" name="q" 
+                           value="{{ request.args.get('q', '') }}"
+                           placeholder="Search by shop name, category, or items...">
                 </div>
-                <a href="{{ url_for('auth.profile') }}" class="btn btn-primary">Update Location</a>
-                {% endif %}
+                <div class="col-md-3">
+                    <label class="form-label">Distance</label>
+                    <select class="form-select" name="distance">
+                        <option value="5" {% if request.args.get('distance') == '5' %}selected{% endif %}>Within 5 km</option>
+                        <option value="10" {% if request.args.get('distance', '10') == '10' %}selected{% endif %}>Within 10 km</option>
+                        <option value="20" {% if request.args.get('distance') == '20' %}selected{% endif %}>Within 20 km</option>
+                        <option value="50" {% if request.args.get('distance') == '50' %}selected{% endif %}>Within 50 km</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Sort By</label>
+                    <select class="form-select" name="sort">
+                        <option value="distance" {% if request.args.get('sort', 'distance') == 'distance' %}selected{% endif %}>Nearest First</option>
+                        <option value="rating" {% if request.args.get('sort') == 'rating' %}selected{% endif %}>Highest Rated</option>
+                        <option value="products" {% if request.args.get('sort') == 'products' %}selected{% endif %}>Most Products</option>
+                    </select>
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="bi bi-search"></i> Search
+                    </button>
+                </div>
+
+                <!-- Categories Filter -->
+                <div class="col-12">
+                    <div class="d-flex gap-2 flex-wrap">
+                        {% for category in categories %}
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" 
+                                       name="categories[]" value="{{ category }}"
+                                       id="cat{{ loop.index }}"
+                                       {% if category in selected_categories %}checked{% endif %}>
+                                <label class="form-check-label" for="cat{{ loop.index }}">
+                                    {{ category }}
+                                </label>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    {% if not current_user.location_lat or not current_user.location_lng %}
+        <div class="alert alert-warning">
+            <h5>Location Required</h5>
+            <p>To find nearby shops, please set your location in your profile settings.</p>
+            <a href="{{ url_for('user.settings') }}" class="btn btn-warning">Update Location</a>
+        </div>
+    {% else %}
+        <!-- Map View -->
+        <div class="card mb-4">
+            <div class="card-body">
+                <div id="map" style="height: 400px;"></div>
             </div>
         </div>
 
-        <div class="mt-4">
-            <h5>Available Shops</h5>
-            <div class="list-group">
+        <!-- Shops List -->
+        {% if shops %}
+            <div class="row">
                 {% for shop in shops %}
-                <a href="{{ url_for('shop.index', shop_id=shop.id) }}" 
-                   class="list-group-item list-group-item-action shop-item"
-                   data-lat="{{ shop.location_lat }}"
-                   data-lng="{{ shop.location_lng }}">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <h6 class="mb-1">{{ shop.name }}</h6>
-                        <small class="distance-text"></small>
+                    <div class="col-md-6 col-lg-4 mb-4">
+                        <div class="card h-100">
+                            {% if shop.image_url %}
+                                <img src="{{ url_for('static', filename='images/shops/' + shop.image_url) }}"
+                                     class="card-img-top" alt="{{ shop.name }}">
+                            {% endif %}
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <h5 class="card-title mb-1">{{ shop.name }}</h5>
+                                    <span class="badge bg-primary rounded-pill">
+                                        {{ "%.1f"|format(shop.distance) }} km
+                                    </span>
+                                </div>
+                                <p class="text-muted small mb-2">{{ shop.address }}</p>
+                                <p class="card-text">{{ shop.description[:100] }}{% if shop.description|length > 100 %}...{% endif %}</p>
+                                
+                                <div class="mb-2">
+                                    {% if shop.rating %}
+                                        <div class="stars">
+                                            {% for i in range(5) %}
+                                                <i class="bi bi-star{% if i < shop.rating|round(0, 'floor') %}-fill{% elif i < shop.rating %}-half{% endif %} text-warning"></i>
+                                            {% endfor %}
+                                            <span class="ms-1 text-muted">({{ shop.reviews_count }})</span>
+                                        </div>
+                                    {% endif %}
+                                </div>
+
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <small class="text-muted">
+                                            <i class="bi bi-box-seam"></i> {{ shop.products|length }} products
+                                        </small>
+                                    </div>
+                                    {% if shop.is_open %}
+                                        <span class="badge bg-success">Open</span>
+                                    {% else %}
+                                        <span class="badge bg-danger">Closed</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="card-footer bg-transparent border-top-0">
+                                <a href="{{ url_for('shop.view', shop_id=shop.id) }}" 
+                                   class="btn btn-primary w-100">
+                                    Visit Shop
+                                </a>
+                            </div>
+                        </div>
                     </div>
-                    <p class="mb-1">{{ shop.description[:100] }}{% if shop.description|length > 100 %}...{% endif %}</p>
-                    <small>{{ shop.address }}</small>
-                </a>
                 {% endfor %}
             </div>
-        </div>
-    </div>
+
+            <!-- Pagination -->
+            {% if pagination.pages > 1 %}
+                <nav class="mt-4">
+                    <ul class="pagination justify-content-center">
+                        {% for page in range(1, pagination.pages + 1) %}
+                            <li class="page-item {{ 'active' if page == pagination.page else '' }}">
+                                <a class="page-link" href="{{ url_for('user.nearby_shops', page=page, **request.args) }}">
+                                    {{ page }}
+                                </a>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                </nav>
+            {% endif %}
+        {% else %}
+            <div class="text-center py-5">
+                <h4>No shops found nearby</h4>
+                <p class="text-muted">Try adjusting your search criteria or increasing the distance range.</p>
+            </div>
+        {% endif %}
+    {% endif %}
 </div>
 {% endblock %}
 
 {% block scripts %}
-<script src="https://maps.googleapis.com/maps/api/js?key={{ config.GOOGLE_MAPS_API_KEY }}&callback=initMap" async defer></script>
+<script src="https://maps.googleapis.com/maps/api/js?key={{ config['GOOGLE_MAPS_API_KEY'] }}"></script>
 <script>
-let map;
-let userMarker;
-let shopMarkers = [];
-let bounds;
+document.addEventListener('DOMContentLoaded', function() {
+    {% if current_user.location_lat and current_user.location_lng and shops %}
+        const userLat = {{ current_user.location_lat }};
+        const userLng = {{ current_user.location_lng }};
+        
+        const map = new google.maps.Map(document.getElementById('map'), {
+            center: { lat: userLat, lng: userLng },
+            zoom: 12
+        });
 
-function initMap() {
-    bounds = new google.maps.LatLngBounds();
-    
-    // Initialize map centered on user's location
-    map = new google.maps.Map(document.getElementById('map'), {
-        zoom: 13,
-        center: {
-            lat: {{ current_user.location_lat or 0 }},
-            lng: {{ current_user.location_lng or 0 }}
+        // Add user marker
+        new google.maps.Marker({
+            position: { lat: userLat, lng: userLng },
+            map: map,
+            title: 'Your Location',
+            icon: {
+                path: google.maps.SymbolPath.CIRCLE,
+                scale: 10,
+                fillColor: '#4285F4',
+                fillOpacity: 1,
+                strokeColor: '#ffffff',
+                strokeWeight: 2
+            }
+        });
+
+        // Add shop markers
+        const bounds = new google.maps.LatLngBounds();
+        bounds.extend({ lat: userLat, lng: userLng });
+
+        {% for shop in shops %}
+            {% if shop.location_lat and shop.location_lng %}
+                const shopLat{{ loop.index }} = {{ shop.location_lat }};
+                const shopLng{{ loop.index }} = {{ shop.location_lng }};
+                
+                const marker{{ loop.index }} = new google.maps.Marker({
+                    position: { lat: shopLat{{ loop.index }}, lng: shopLng{{ loop.index }} },
+                    map: map,
+                    title: '{{ shop.name|escapejs }}'
+                });
+
+                const infowindow{{ loop.index }} = new google.maps.InfoWindow({
+                    content: `
+                        <div class="p-2">
+                            <h6>{{ shop.name|escapejs }}</h6>
+                            <p class="mb-1"><small>{{ shop.address|escapejs }}</small></p>
+                            <p class="mb-1">Distance: {{ "%.1f"|format(shop.distance) }} km</p>
+                            <a href="{{ url_for('shop.view', shop_id=shop.id) }}" 
+                               class="btn btn-sm btn-primary">Visit Shop</a>
+                        </div>
+                    `
+                });
+
+                marker{{ loop.index }}.addListener('click', () => {
+                    infowindow{{ loop.index }}.open(map, marker{{ loop.index }});
+                });
+
+                bounds.extend({ lat: shopLat{{ loop.index }}, lng: shopLng{{ loop.index }} });
+            {% endif %}
+        {% endfor %}
+
+        map.fitBounds(bounds);
+    {% endif %}
+
+    // Auto-submit form when sort or distance changes
+    ['sort', 'distance'].forEach(field => {
+        const select = document.querySelector(`select[name="${field}"]`);
+        if (select) {
+            select.addEventListener('change', function() {
+                this.form.submit();
+            });
         }
     });
 
-    // Add user marker if location is set
-    {% if current_user.location_lat %}
-        userMarker = new google.maps.Marker({
-            position: {
-                lat: {{ current_user.location_lat }},
-                lng: {{ current_user.location_lng }}
-            },
-            map: map,
-            icon: 'http://maps.google.com/mapfiles/ms/icons/blue-dot.png',
-            title: 'Your Location'
+    // Handle category checkboxes
+    document.querySelectorAll('input[name="categories[]"]').forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            this.form.submit();
         });
-        bounds.extend(userMarker.getPosition());
-    {% endif %}
-
-    // Add shop markers
-    {% for shop in shops %}
-        const shopMarker = new google.maps.Marker({
-            position: {
-                lat: {{ shop.location_lat }},
-                lng: {{ shop.location_lng }}
-            },
-            map: map,
-            icon: 'http://maps.google.com/mapfiles/ms/icons/red-dot.png',
-            title: '{{ shop.name }}'
-        });
-        
-        const infoWindow = new google.maps.InfoWindow({
-            content: `
-                <div>
-                    <h6>{{ shop.name }}</h6>
-                    <p>{{ shop.address }}</p>
-                    <a href="{{ url_for('shop.index', shop_id=shop.id) }}" class="btn btn-sm btn-primary">Visit Shop</a>
-                </div>
-            `
-        });
-
-        shopMarker.addListener('click', () => {
-            infoWindow.open(map, shopMarker);
-        });
-
-        shopMarkers.push(shopMarker);
-        bounds.extend(shopMarker.getPosition());
-    {% endfor %}
-
-    // Fit map to show all markers
-    map.fitBounds(bounds);
-
-    // Calculate distances if user location is set
-    {% if current_user.location_lat %}
-        calculateDistances();
-    {% endif %}
-}
-
-function calculateDistances() {
-    const userLocation = {
-        lat: {{ current_user.location_lat or 0 }},
-        lng: {{ current_user.location_lng or 0 }}
-    };
-
-    document.querySelectorAll('.shop-item').forEach(item => {
-        const shopLat = parseFloat(item.dataset.lat);
-        const shopLng = parseFloat(item.dataset.lng);
-        const distance = getDistance(
-            userLocation.lat, userLocation.lng,
-            shopLat, shopLng
-        );
-        
-        item.querySelector('.distance-text').textContent = 
-            `${distance.toFixed(1)} km away`;
     });
-}
-
-function getDistance(lat1, lon1, lat2, lon2) {
-    const R = 6371; // Earth's radius in km
-    const dLat = deg2rad(lat2 - lat1);
-    const dLon = deg2rad(lon2 - lon1);
-    const a = 
-        Math.sin(dLat/2) * Math.sin(dLat/2) +
-        Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * 
-        Math.sin(dLon/2) * Math.sin(dLon/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    return R * c;
-}
-
-function deg2rad(deg) {
-    return deg * (Math.PI/180);
-}
+});
 </script>
 {% endblock %}

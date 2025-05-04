@@ -47,6 +47,7 @@ class Product(db.Model):
     stock = db.Column(db.Integer, nullable=False, default=0)
     shop_id = db.Column(db.Integer, db.ForeignKey('shop.id'), nullable=False)
     image_url = db.Column(db.String(255))
+    category = db.Column(db.String(50))  # Add category field
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     # Negotiation settings
@@ -54,7 +55,7 @@ class Product(db.Model):
     max_discount_percentage = db.Column(db.Float, default=20.0)  # Maximum allowed discount
     continue_iteration = db.Column(db.Boolean, default=False)  # Whether to continue negotiation after max discount
     
-    def __init__(self, name, description, price, stock, shop_id, min_price=None, max_discount_percentage=20.0, image_url=None, continue_iteration=False):
+    def __init__(self, name, description, price, stock, shop_id, min_price=None, max_discount_percentage=20.0, image_url=None, continue_iteration=False, category=None):
         self.name = name
         self.description = description
         self.price = price
@@ -64,6 +65,7 @@ class Product(db.Model):
         self.max_discount_percentage = max_discount_percentage
         self.image_url = image_url
         self.continue_iteration = continue_iteration
+        self.category = category
 
     def is_negotiable(self):
         """Check if product supports price negotiation"""
@@ -96,6 +98,7 @@ class Product(db.Model):
             'shop_id': self.shop_id,
             'shop_name': self.shop.name,
             'image_url': self.image_url,
+            'category': self.category,
             'is_negotiable': self.is_negotiable(),
             'min_price': self.min_price if self.is_negotiable() else None,
             'max_discount': self.max_discount_percentage if self.is_negotiable() else None,

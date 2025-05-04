@@ -6,9 +6,17 @@
 <!-- Banner Section -->
 <div class="banner-section">
     <div class="banner-content">
-        <h1 class="banner-title">QUICKSHOP</h1>
+        <h1 class="banner-title">Welcome to our QuickShop</h1>
         <div class="banner-subtitle">UP to 40% OFF</div>
         <p>Up to 40% OFF - Best Deals Online on All Products</p>
+        
+        <!-- Adding prominent search box -->
+        <div class="col-md-8 mx-auto mt-4">
+            {% with search_type='all' %}
+            {% include 'includes/search_box.html' %}
+            {% endwith %}
+        </div>
+        
         <a href="{{ url_for('shop.index') }}" class="btn btn-light btn-lg mt-3">Shop Now</a>
     </div>
     <div class="banner-dots">

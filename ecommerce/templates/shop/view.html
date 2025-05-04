@@ -3,69 +3,100 @@
 {% block title %}{{ shop.name }}{% endblock %}
 
 {% block content %}
-<div class="row mb-4">
-    <div class="col-md-8">
-        <h2>{{ shop.name }}</h2>
-        <p class="lead">{{ shop.description }}</p>
-    </div>
-    <div class="col-md-4">
-        <!-- Shop map section -->
-        <div class="card">
-            <div class="card-body">
-                <h5 class="card-title">Shop Information</h5>
-                <p><strong>Address:</strong><br>
-                {{ shop.address }}</p>
-                <div id="map" style="height: 200px;"></div>
-                <div id="mapError" class="alert alert-warning mt-2" style="display: none;">
-                    Unable to load map. Location information is still available in the address above.
+<div class="container mt-4">
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h2>{{ shop.name }}</h2>
+            <p class="lead">{{ shop.description }}</p>
+            
+            <!-- Shop-specific search box -->
+            <form class="search-form mb-4" action="{{ url_for('main.search') }}" method="GET">
+                <input type="hidden" name="type" value="products">
+                <input type="hidden" name="shop_id" value="{{ shop.id }}">
+                <div class="input-group">
+                    <input class="form-control search-input" type="search" name="q" 
+                           placeholder="Search products in {{ shop.name }}..." 
+                           value="{{ request.args.get('q', '') }}"
+                           aria-label="Search" autocomplete="off">
+                    <button class="btn btn-outline-primary" type="submit">
+                        <i class="bi bi-search"></i>
+                    </button>
+                    <div class="search-suggestions dropdown-menu"></div>
+                </div>
+            </form>
+        </div>
+        <div class="col-md-4">
+            <!-- Shop map section -->
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Shop Information</h5>
+                    <p><strong>Address:</strong><br>
+                    {{ shop.address }}</p>
+                    <div id="map" style="height: 200px;"></div>
+                    <div id="mapError" class="alert alert-warning mt-2" style="display: none;">
+                        Unable to load map. Location information is still available in the address above.
+                    </div>
                 </div>
             </div>
         </div>
     </div>
-</div>
 
-<div class="row">
-    {% for product in shop.products %}
-        <div class="col-md-4 mb-4">
-            <div class="card h-100">
-                <div class="card-body">
-                    <h5 class="card-title">{{ product.name }}</h5>
-                    <p class="card-text">{{ product.description }}</p>
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <div>
-                            <h6 class="mb-0">${{ "%.2f"|format(product.price) }}</h6>
-                            {% if product.min_price %}
-                                <small class="text-muted">Negotiable</small>
+    <div class="row">
+        {% for product in shop.products %}
+            <div class="col-md-4 mb-4">
+                <div class="card h-100">
+                    {% if product.image_url %}
+                        <img src="{{ url_for('static', filename='images/products/' + product.image_url) }}"
+                             class="card-img-top" alt="{{ product.name }}">
+                    {% endif %}
+                    <div class="card-body">
+                        <h5 class="card-title">{{ product.name }}</h5>
+                        <p class="card-text">{{ product.description[:100] }}{% if product.description|length > 100 %}...{% endif %}</p>
+                        <p class="card-text">
+                            <strong class="text-primary">৳{{ "%.2f"|format(product.price) }}</strong>
+                            {% if product.category %}
+                                <span class="badge bg-secondary ms-2">{{ product.category }}</span>
                             {% endif %}
-                        </div>
-                        <span class="badge bg-{{ 'success' if product.stock > 10 else 'warning' if product.stock > 0 else 'danger' }}">
-                            {{ 'In Stock' if product.stock > 10 else 'Low Stock' if product.stock > 0 else 'Out of Stock' }}
-                        </span>
-                    </div>
-                    <div class="d-grid gap-2">
+                        </p>
                         {% if product.stock > 0 %}
-                            {% if product.min_price %}
-                                <button class="btn btn-outline-primary negotiate-btn"
+                            <p class="text-success">
+                                <i class="bi bi-check-circle"></i> In Stock ({{ product.stock }} available)
+                            </p>
+                        {% else %}
+                            <p class="text-danger">
+                                <i class="bi bi-x-circle"></i> Out of Stock
+                            </p>
+                        {% endif %}
+                    </div>
+                    <div class="card-footer bg-transparent border-top-0 d-flex justify-content-between">
+                        {% if product.stock > 0 %}
+                            <button class="btn btn-primary add-to-cart" 
+                                    data-product-id="{{ product.id }}"
+                                    data-product-name="{{ product.name }}">
+                                <i class="bi bi-cart-plus"></i> Add to Cart
+                            </button>
+                            {% if product.is_negotiable() %}
+                                <button class="btn btn-outline-primary negotiate-price"
                                         data-product-id="{{ product.id }}"
                                         data-product-name="{{ product.name }}"
-                                        data-product-price="{{ product.price }}">
-                                    Negotiate Price
+                                        data-price="{{ product.price }}">
+                                    <i class="bi bi-chat-dots"></i> Negotiate
                                 </button>
                             {% endif %}
-                            <button class="btn btn-primary add-to-cart"
-                                    data-product-id="{{ product.id }}"
-                                    data-product-name="{{ product.name }}"
-                                    data-product-price="{{ product.price }}">
-                                Add to Cart
-                            </button>
                         {% else %}
                             <button class="btn btn-secondary" disabled>Out of Stock</button>
                         {% endif %}
                     </div>
                 </div>
             </div>
-        </div>
-    {% endfor %}
+        {% else %}
+            <div class="col-12">
+                <div class="alert alert-info">
+                    No products available in this shop yet.
+                </div>
+            </div>
+        {% endfor %}
+    </div>
 </div>
 
 <!-- Negotiation Modal -->
@@ -77,60 +108,32 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <div class="product-info mb-4">
-                    <h6>Product: <span id="negotiateProductName"></span></h6>
-                    <p class="mb-2">Original Price: $<span id="negotiateProductPrice"></span></p>
-                </div>
-                
-                <div class="negotiation-chat mb-4" style="max-height: 300px; overflow-y: auto;">
-                    <div class="list-group" id="negotiationMessages">
-                        <!-- Messages will be added here -->
-                    </div>
-                </div>
-
-                <div class="offer-form">
-                    <div class="input-group mb-3">
-                        <span class="input-group-text">$</span>
-                        <input type="number" class="form-control" id="offerPrice" step="0.01"
-                               placeholder="Enter your offer">
-                        <button class="btn btn-primary" id="makeOfferBtn">
-                            Make Offer
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Add to Cart Modal -->
-<div class="modal fade" id="addToCartModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Add to Cart</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <form id="addToCartForm">
+                <form id="negotiationForm">
+                    <input type="hidden" id="negotiationProductId">
                     <div class="mb-3">
                         <label class="form-label">Product</label>
-                        <input type="text" class="form-control" id="cartProductName" readonly>
+                        <input type="text" class="form-control" id="negotiationProductName" readonly>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Price</label>
-                        <input type="text" class="form-control" id="cartProductPrice" readonly>
+                        <label class="form-label">Original Price</label>
+                        <div class="input-group">
+                            <span class="input-group-text">৳</span>
+                            <input type="text" class="form-control" id="negotiationOriginalPrice" readonly>
+                        </div>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Quantity</label>
-                        <input type="number" class="form-control" id="cartQuantity" value="1" min="1" required>
+                        <label class="form-label">Your Offer</label>
+                        <div class="input-group">
+                            <span class="input-group-text">৳</span>
+                            <input type="number" class="form-control" id="negotiationOffer" step="0.01" required>
+                        </div>
                     </div>
-                    <input type="hidden" id="cartProductId">
                 </form>
+                <div id="negotiationResponse" class="alert" style="display: none;"></div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-primary" id="confirmAddToCart">Add to Cart</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" id="submitNegotiation">Submit Offer</button>
             </div>
         </div>
     </div>

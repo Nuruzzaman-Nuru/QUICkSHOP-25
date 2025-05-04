@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify, current_app
 from flask_login import login_required, current_user
-from sqlalchemy import func
+from sqlalchemy import func, or_, desc, asc
 from functools import wraps
 from werkzeug.utils import secure_filename
 import os
@@ -134,15 +134,47 @@ def orders():
     shop = current_user.shop
     if not shop:
         return redirect(url_for('shop.create'))
-        
+    
+    # Get search and filter parameters
+    search_query = request.args.get('q', '')
     status = request.args.get('status')
+    sort = request.args.get('sort', 'newest')
+    page = request.args.get('page', 1, type=int)
+    per_page = 20
+    
+    # Base query
     query = Order.query.filter_by(shop_id=shop.id)
     
+    # Apply search filter
+    if search_query:
+        query = query.join(Order.customer).filter(
+            or_(
+                Order.id.cast(String).ilike(f'%{search_query}%'),
+                User.username.ilike(f'%{search_query}%')
+            )
+        )
+    
+    # Apply status filter
     if status:
         query = query.filter_by(status=status)
-        
-    orders = query.order_by(Order.created_at.desc()).all()
-    return render_template('shop/orders.html', orders=orders)
+    
+    # Apply sorting
+    if sort == 'oldest':
+        query = query.order_by(Order.created_at.asc())
+    elif sort == 'highest':
+        query = query.order_by(Order.total_amount.desc())
+    elif sort == 'lowest':
+        query = query.order_by(Order.total_amount.asc())
+    else:  # newest
+        query = query.order_by(Order.created_at.desc())
+    
+    # Paginate results
+    pagination = query.paginate(page=page, per_page=per_page)
+    orders = pagination.items
+    
+    return render_template('shop/orders.html', 
+                         orders=orders,
+                         pagination=pagination)
 
 @shop_bp.route('/order/<int:order_id>/details')
 @login_required

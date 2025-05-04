@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+
+{% block title %}Search Results{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <!-- Filters Sidebar -->
+        <div class="col-md-3">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">Search Options</h5>
+                </div>
+                <div class="card-body">
+                    <form id="filterForm" method="GET" action="{{ url_for('main.search') }}">
+                        <input type="hidden" name="q" value="{{ query }}">
+                        
+                        <!-- Search Type -->
+                        <div class="mb-3">
+                            <label class="form-label">Search In</label>
+                            <select class="form-select" name="type" onchange="this.form.submit()">
+                                <option value="all" {% if search_type == 'all' %}selected{% endif %}>All</option>
+                                <option value="products" {% if search_type == 'products' %}selected{% endif %}>Products Only</option>
+                                <option value="shops" {% if search_type == 'shops' %}selected{% endif %}>Shops Only</option>
+                            </select>
+                        </div>
+
+                        {% if search_type != 'shops' %}
+                        <!-- Category Filter -->
+                        <div class="mb-3">
+                            <label class="form-label">Category</label>
+                            <select class="form-select" name="category">
+                                <option value="">All Categories</option>
+                                {% for category in categories %}
+                                    <option value="{{ category }}" {% if category == current_category %}selected{% endif %}>
+                                        {{ category }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <!-- Price Range Filter -->
+                        <div class="mb-3">
+                            <label class="form-label">Price Range</label>
+                            <div class="input-group mb-2">
+                                <span class="input-group-text">৳</span>
+                                <input type="number" class="form-control" name="min_price" 
+                                       placeholder="Min" value="{{ min_price or '' }}" min="0">
+                            </div>
+                            <div class="input-group">
+                                <span class="input-group-text">৳</span>
+                                <input type="number" class="form-control" name="max_price" 
+                                       placeholder="Max" value="{{ max_price or '' }}" min="0">
+                            </div>
+                        </div>
+
+                        <!-- Sort Options -->
+                        <div class="mb-3">
+                            <label class="form-label">Sort By</label>
+                            <select class="form-select" name="sort">
+                                <option value="relevance" {% if current_sort == 'relevance' %}selected{% endif %}>Relevance</option>
+                                <option value="price_low" {% if current_sort == 'price_low' %}selected{% endif %}>Price: Low to High</option>
+                                <option value="price_high" {% if current_sort == 'price_high' %}selected{% endif %}>Price: High to Low</option>
+                                <option value="newest" {% if current_sort == 'newest' %}selected{% endif %}>Newest First</option>
+                            </select>
+                        </div>
+                        {% endif %}
+
+                        <button type="submit" class="btn btn-primary w-100">Apply Filters</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Search Results -->
+        <div class="col-md-9">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2>Search Results {% if query %}for "{{ query }}"{% endif %}</h2>
+            </div>
+
+            {% if shops and search_type in ['all', 'shops'] %}
+            <div class="mb-4">
+                <h3 class="h4 mb-3">Shops ({{ shops|length }})</h3>
+                <div class="row">
+                    {% for shop in shops %}
+                        <div class="col-md-6 mb-4">
+                            <div class="card h-100">
+                                <div class="card-body">
+                                    <h5 class="card-title">
+                                        {% if query %}
+                                            {{ shop.name|replace(query, '<mark>' + query + '</mark>')|safe }}
+                                        {% else %}
+                                            {{ shop.name }}
+                                        {% endif %}
+                                    </h5>
+                                    <p class="card-text">
+                                        {% if query %}
+                                            {{ shop.description[:150]|replace(query, '<mark>' + query + '</mark>')|safe }}
+                                        {% else %}
+                                            {{ shop.description[:150] }}
+                                        {% endif %}
+                                        {% if shop.description|length > 150 %}...{% endif %}
+                                    </p>
+                                    <p class="card-text">
+                                        <small class="text-muted">
+                                            <i class="bi bi-geo-alt"></i> {{ shop.address }}
+                                        </small>
+                                    </p>
+                                </div>
+                                <div class="card-footer bg-transparent border-top-0">
+                                    <a href="{{ url_for('shop.view', shop_id=shop.id) }}" class="btn btn-primary">Visit Shop</a>
+                                </div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+            
+            {% if products and search_type in ['all', 'products'] %}
+            <div>
+                <h3 class="h4 mb-3">Products ({{ products|length }})</h3>
+                <div class="row">
+                    {% for product in products %}
+                        <div class="col-md-4 mb-4">
+                            <div class="card h-100">
+                                {% if product.image_url %}
+                                    <img src="{{ url_for('static', filename='images/products/' + product.image_url) }}" 
+                                         class="card-img-top" alt="{{ product.name }}">
+                                {% endif %}
+                                <div class="card-body">
+                                    <h5 class="card-title">
+                                        {% if query %}
+                                            {{ product.name|replace(query, '<mark>' + query + '</mark>')|safe }}
+                                        {% else %}
+                                            {{ product.name }}
+                                        {% endif %}
+                                    </h5>
+                                    <p class="card-text">
+                                        {% if query %}
+                                            {{ product.description[:100]|replace(query, '<mark>' + query + '</mark>')|safe }}
+                                        {% else %}
+                                            {{ product.description[:100] }}
+                                        {% endif %}
+                                        {% if product.description|length > 100 %}...{% endif %}
+                                    </p>
+                                    <p class="card-text">
+                                        <strong class="text-primary">৳{{ "%.2f"|format(product.price) }}</strong>
+                                        {% if product.category %}
+                                            <span class="badge bg-secondary ms-2">{{ product.category }}</span>
+                                        {% endif %}
+                                    </p>
+                                    <p class="card-text">
+                                        <small class="text-muted">
+                                            Sold by <a href="{{ url_for('shop.view', shop_id=product.shop.id) }}">{{ product.shop.name }}</a>
+                                        </small>
+                                    </p>
+                                </div>
+                                <div class="card-footer bg-transparent border-top-0">
+                                    <a href="{{ url_for('shop.view', shop_id=product.shop.id) }}" class="btn btn-primary">View Details</a>
+                                </div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            {% if not products and not shops %}
+                <div class="alert alert-info">
+                    No results found matching your search. Try different keywords or <a href="{{ url_for('shop.index') }}">browse all shops</a>.
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Auto-submit form when sort option changes
+    const sortSelect = document.querySelector('select[name="sort"]');
+    if (sortSelect) {
+        sortSelect.addEventListener('change', function() {
+            document.getElementById('filterForm').submit();
+        });
+    }
+});
+</script>
+{% endblock %}

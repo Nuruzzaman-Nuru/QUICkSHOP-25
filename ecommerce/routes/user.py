@@ -1,8 +1,8 @@
 from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify
 from flask_login import login_required, current_user
-from sqlalchemy import func
-from ..models.order import Order
-from ..models.shop import Shop
+from sqlalchemy import func, or_, and_, desc, asc, cast, String, case
+from ..models.order import Order, OrderItem
+from ..models.shop import Shop, Product
 from ..models.user import User
 from ..models.cart import CartItem
 from ..models.negotiation import Negotiation
@@ -73,21 +73,54 @@ def dashboard():
 @user_bp.route('/orders')
 @login_required
 def orders():
-    status = request.args.get('status', None)
+    # Get search and filter parameters
+    search_query = request.args.get('q', '')
+    status = request.args.get('status')
+    sort = request.args.get('sort', 'newest')
+    page = request.args.get('page', 1, type=int)
+    per_page = 10
+    
+    # Base query
     query = Order.query.filter_by(customer_id=current_user.id)
     
+    # Apply search filter
+    if search_query:
+        query = query.join(Order.shop).join(Order.items).join(OrderItem.product).filter(
+            or_(
+                Order.id.cast(String).ilike(f'%{search_query}%'),
+                Shop.name.ilike(f'%{search_query}%'),
+                Product.name.ilike(f'%{search_query}%')
+            )
+        ).distinct()
+    
+    # Apply status filter
     if status:
         query = query.filter_by(status=status)
-        
-    orders = query.order_by(Order.created_at.desc()).all()
-    return render_template('user/orders.html', orders=orders)
+    
+    # Apply sorting
+    if sort == 'oldest':
+        query = query.order_by(Order.created_at.asc())
+    elif sort == 'highest':
+        query = query.order_by(Order.total_amount.desc())
+    elif sort == 'lowest':
+        query = query.order_by(Order.total_amount.asc())
+    else:  # newest
+        query = query.order_by(Order.created_at.desc())
+    
+    # Paginate results
+    pagination = query.paginate(page=page, per_page=per_page)
+    orders = pagination.items
+    
+    return render_template('user/orders.html', 
+                         orders=orders,
+                         pagination=pagination)
 
 @user_bp.route('/order/<int:order_id>')
 @login_required
 def order_detail(order_id):
     order = Order.query.get_or_404(order_id)
     if order.customer_id != current_user.id:
-        flash('Access denied', 'error')
+        flash('Access denied.', 'error')
         return redirect(url_for('user.orders'))
     return render_template('user/order_detail.html', order=order)
 
@@ -96,23 +129,60 @@ def order_detail(order_id):
 def track_order(order_id):
     order = Order.query.get_or_404(order_id)
     if order.customer_id != current_user.id:
-        flash('Access denied', 'error')
+        flash('Access denied.', 'error')
         return redirect(url_for('user.orders'))
     return render_template('user/track_order.html', order=order)
 
 @user_bp.route('/negotiations')
 @login_required
 def negotiations():
-    negotiations = Negotiation.query.filter_by(customer_id=current_user.id)\
-        .order_by(Negotiation.created_at.desc()).all()
-    return render_template('user/negotiations.html', negotiations=negotiations)
+    # Get search and filter parameters
+    search_query = request.args.get('q', '')
+    status = request.args.get('status')
+    sort = request.args.get('sort', 'newest')
+    page = request.args.get('page', 1, type=int)
+    per_page = 10
+    
+    # Base query
+    query = Negotiation.query.filter_by(customer_id=current_user.id)
+    
+    # Apply search filter
+    if search_query:
+        query = query.join(Negotiation.product).join(Product.shop).filter(
+            or_(
+                Product.name.ilike(f'%{search_query}%'),
+                Shop.name.ilike(f'%{search_query}%')
+            )
+        )
+    
+    # Apply status filter
+    if status:
+        query = query.filter_by(status=status)
+    
+    # Apply sorting
+    if sort == 'oldest':
+        query = query.order_by(Negotiation.created_at.asc())
+    elif sort == 'highest_offer':
+        query = query.order_by(Negotiation.offered_price.desc())
+    elif sort == 'lowest_offer':
+        query = query.order_by(Negotiation.offered_price.asc())
+    else:  # newest
+        query = query.order_by(Negotiation.created_at.desc())
+    
+    # Paginate results
+    pagination = query.paginate(page=page, per_page=per_page)
+    negotiations = pagination.items
+    
+    return render_template('user/negotiations.html',
+                         negotiations=negotiations,
+                         pagination=pagination)
 
 @user_bp.route('/negotiation/<int:nego_id>')
 @login_required
 def negotiation_detail(nego_id):
     negotiation = Negotiation.query.get_or_404(nego_id)
     if negotiation.customer_id != current_user.id:
-        flash('Access denied', 'error')
+        flash('Access denied.', 'error')
         return redirect(url_for('user.negotiations'))
     return render_template('user/negotiation_detail.html', negotiation=negotiation)
 
@@ -125,29 +195,44 @@ def make_counter_offer(nego_id):
             'status': 'error',
             'message': 'Access denied'
         }), 403
-        
-    offered_price = float(request.form.get('offered_price', 0))
-    if offered_price <= 0:
+    
+    if negotiation.status not in ['pending', 'counter_offer']:
         return jsonify({
             'status': 'error',
-            'message': 'Invalid price'
+            'message': 'This negotiation is no longer active'
         }), 400
-        
-    # Process negotiation with AI
-    result = process_negotiation(negotiation, offered_price)
-    if result['accepted']:
-        negotiation.status = 'accepted'
-        negotiation.final_price = offered_price
-    else:
-        negotiation.status = 'counter_offer'
-        negotiation.counter_price = result['counter_price']
+    
+    try:
+        offered_price = float(request.json.get('offered_price'))
+        if offered_price <= 0:
+            raise ValueError()
+    except (TypeError, ValueError):
+        return jsonify({
+            'status': 'error',
+            'message': 'Invalid offer amount'
+        }), 400
     
     negotiation.offered_price = offered_price
+    negotiation.rounds += 1
+    
+    # Process with negotiation bot
+    decision, counter_offer, message = process_negotiation(negotiation)
+    
+    if decision == 'accept':
+        negotiation.accept_offer(offered_price)
+    elif decision == 'reject':
+        negotiation.reject_offer()
+    else:  # counter
+        negotiation.add_counter_offer(counter_offer)
+    
     db.session.commit()
     
     return jsonify({
         'status': 'success',
-        'result': result
+        'decision': decision,
+        'message': message,
+        'counter_offer': counter_offer,
+        'negotiation': negotiation.to_dict()
     })
 
 @user_bp.route('/settings', methods=['GET', 'POST'])
@@ -175,23 +260,86 @@ def nearby_shops():
     if not current_user.location_lat or not current_user.location_lng:
         flash('Please update your location in settings.', 'warning')
         return redirect(url_for('user.settings'))
-        
-    shops = Shop.query.filter_by(is_active=True).all()
-    for shop in shops:
-        if shop.location_lat and shop.location_lng:
-            shop.distance = calculate_distance(
-                current_user.location_lat,
-                current_user.location_lng,
-                shop.location_lat,
-                shop.location_lng
+    
+    # Get search and filter parameters
+    search_query = request.args.get('q', '')
+    max_distance = float(request.args.get('distance', '10'))  # Default 10km
+    sort_by = request.args.get('sort', 'distance')
+    selected_categories = request.args.getlist('categories[]')
+    page = request.args.get('page', 1, type=int)
+    per_page = 12
+    
+    # Base query starting with active shops
+    query = Shop.query.filter_by(is_active=True)
+    
+    # Apply search filter if provided
+    if search_query:
+        query = query.join(Shop.products).filter(
+            or_(
+                Shop.name.ilike(f'%{search_query}%'),
+                Shop.description.ilike(f'%{search_query}%'),
+                Product.name.ilike(f'%{search_query}%'),
+                Product.category.ilike(f'%{search_query}%')
             )
-        else:
-            shop.distance = float('inf')
+        ).distinct()
     
-    # Sort shops by distance
-    shops.sort(key=lambda x: x.distance)
+    # Filter by categories if selected
+    if selected_categories:
+        query = query.join(Shop.products).filter(
+            Product.category.in_(selected_categories)
+        ).distinct()
     
-    return render_template('user/nearby_shops.html', shops=shops)
+    # Add distance calculation
+    query = query.add_columns(
+        func.round(
+            func.acos(
+                func.sin(func.radians(current_user.location_lat)) * 
+                func.sin(func.radians(Shop.location_lat)) +
+                func.cos(func.radians(current_user.location_lat)) * 
+                func.cos(func.radians(Shop.location_lat)) * 
+                func.cos(func.radians(Shop.location_lng) - 
+                        func.radians(current_user.location_lng))
+            ) * 6371,  # Earth's radius in kilometers
+            2
+        ).label('distance')
+    )
+    
+    # Filter by maximum distance
+    query = query.having(func.coalesce('distance', float('inf')) <= max_distance)
+    
+    # Apply sorting
+    if sort_by == 'rating':
+        query = query.order_by(Shop.rating.desc(), 'distance')
+    elif sort_by == 'products':
+        query = query.outerjoin(Shop.products)\
+                    .group_by(Shop.id)\
+                    .order_by(func.count(Product.id).desc(), 'distance')
+    else:  # distance
+        query = query.order_by('distance')
+    
+    # Execute query with pagination
+    pagination = query.paginate(page=page, per_page=per_page)
+    shops_with_distance = pagination.items
+    
+    # Prepare shops list with distance
+    shops = []
+    for shop, distance in shops_with_distance:
+        shop.distance = distance
+        shops.append(shop)
+    
+    # Get unique categories from all products for the filter
+    categories = db.session.query(Product.category)\
+        .distinct()\
+        .filter(Product.category.isnot(None))\
+        .order_by(Product.category)\
+        .all()
+    categories = [c[0] for c in categories]
+    
+    return render_template('user/nearby_shops.html',
+                         shops=shops,
+                         categories=categories,
+                         selected_categories=selected_categories,
+                         pagination=pagination)
 
 def calculate_distance(lat1, lon1, lat2, lon2):
     """Calculate distance between two points in kilometers using Haversine formula"""

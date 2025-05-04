@@ -11,6 +11,7 @@ from ..utils.notifications import (
     notify_admin_order_status
 )
 from .. import db
+from sqlalchemy import or_, and_
 
 api_bp = Blueprint('api', __name__, url_prefix='/api')
 
@@ -584,3 +585,73 @@ def accept_negotiation(negotiation_id):
             'status': 'error',
             'message': 'No counter offer available'
         }), 400
+
+@api_bp.route('/search/suggestions')
+def search_suggestions():
+    query = request.args.get('q', '')
+    shop_id = request.args.get('shop_id', type=int)
+    
+    if not query or len(query) < 2:
+        return jsonify([])
+    
+    # Base product query
+    product_query = Product.query
+    
+    # If shop_id is provided, limit to that shop's products
+    if shop_id:
+        product_query = product_query.filter(Product.shop_id == shop_id)
+    else:
+        # Only show products from active shops
+        product_query = product_query.filter(Product.shop.has(Shop.is_active == True))
+    
+    # Get matching products
+    products = product_query.filter(
+        or_(
+            Product.name.ilike(f'%{query}%'),
+            Product.description.ilike(f'%{query}%'),
+            Product.category.ilike(f'%{query}%')
+        )
+    ).with_entities(Product.name, Product.category).distinct().limit(5).all()
+    
+    # Get matching shops if not searching within a specific shop
+    shops = []
+    if not shop_id:
+        shops = Shop.query.filter(
+            and_(
+                Shop.is_active == True,
+                or_(
+                    Shop.name.ilike(f'%{query}%'),
+                    Shop.description.ilike(f'%{query}%')
+                )
+            )
+        ).with_entities(Shop.name).distinct().limit(3).all()
+    
+    # Format suggestions
+    results = []
+    
+    # Add product suggestions
+    for name, category in products:
+        if name.lower().startswith(query.lower()):
+            results.append({
+                'text': name,
+                'type': 'product',
+                'category': category
+            })
+        if category and category.lower().startswith(query.lower()):
+            results.append({
+                'text': category,
+                'type': 'category'
+            })
+    
+    # Add shop suggestions
+    for (name,) in shops:
+        results.append({
+            'text': name,
+            'type': 'shop'
+        })
+    
+    # Deduplicate and limit results
+    seen = set()
+    results = [x for x in results if not (x['text'] in seen or seen.add(x['text']))][:5]
+    
+    return jsonify(results)
