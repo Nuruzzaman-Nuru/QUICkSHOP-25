@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+
+{% block title %}Profile{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="mb-0">Profile</h3>
+                </div>
+                <div class="card-body">
+                    {% with messages = get_flashed_messages(with_categories=true) %}
+                        {% if messages %}
+                            {% for category, message in messages %}
+                                <div class="alert alert-{{ category }}">{{ message }}</div>
+                            {% endfor %}
+                        {% endif %}
+                    {% endwith %}
+
+                    <div class="mb-4">
+                        <h5>Account Information</h5>
+                        <p><strong>Username:</strong> {{ current_user.username }}</p>
+                        <p><strong>Email:</strong> {{ current_user.email }}</p>
+                        <p><strong>Role:</strong> {{ current_user.role }}</p>
+                    </div>
+
+                    <div class="mb-4">
+                        <h5>Location Information</h5>
+                        <form method="POST">
+                            <div class="mb-3">
+                                <label for="address" class="form-label">Delivery Address</label>
+                                <input type="text" class="form-control" id="address" name="address" 
+                                       value="{{ current_user.address }}" required>
+                            </div>
+                            
+                            <!-- Hidden fields for coordinates (None হলে খালি string হবে) -->
+                            <input type="hidden" id="latitude" name="latitude" 
+                                   value="{{ current_user.location_lat if current_user.location_lat is not none else '' }}">
+                            <input type="hidden" id="longitude" name="longitude" 
+                                   value="{{ current_user.location_lng if current_user.location_lng is not none else '' }}">
+                            
+                            <div class="d-grid">
+                                <button type="submit" class="btn btn-primary">Update Location</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Initialize location autocomplete if Google Maps API is available
+if (typeof google !== 'undefined') {
+    const addressInput = document.getElementById('address');
+    const autocomplete = new google.maps.places.Autocomplete(addressInput);
+    
+    autocomplete.addListener('place_changed', function() {
+        const place = autocomplete.getPlace();
+        if (place.geometry) {
+            document.getElementById('latitude').value = place.geometry.location.lat();
+            document.getElementById('longitude').value = place.geometry.location.lng();
+        }
+    });
+}
+</script>
+{% endblock %}

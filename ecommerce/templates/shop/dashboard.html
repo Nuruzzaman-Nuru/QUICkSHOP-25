@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+
+{% block title %}Shop Dashboard{% endblock %}
+
+{% block content %}
+<div class="dashboard-container">
+    <div class="shop-analytics">
+        <h1>Shop Dashboard</h1>
+        <p>Welcome, {{ current_user.username }}</p>
+        <h3>{{ shop.name }}</h3>
+    </div>
+
+    <div class="admin-stats">
+        <div class="dashboard-card">
+            <h3>Products</h3>
+            <p class="stat-number">{{ products_count }}</p>
+            <a href="{{ url_for('shop.manage') }}" class="action-btn action-primary">Manage Products</a>
+        </div>
+
+        <div class="dashboard-card">
+            <h3>Active Orders</h3>
+            <p class="stat-number">{{ active_orders_count }}</p>
+            <a href="{{ url_for('shop.orders') }}" class="action-btn action-primary">View Orders</a>
+        </div>
+
+        <div class="dashboard-card">
+            <h3>Total Revenue</h3>
+            <p class="stat-number">${{ "%.2f"|format(total_revenue) }}</p>
+            <a href="{{ url_for('shop.analytics') }}" class="action-btn action-primary">View Analytics</a>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-6">
+            <div class="dashboard-card">
+                <h3>Recent Orders</h3>
+                <div class="table-responsive">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Order ID</th>
+                                <th>Customer</th>
+                                <th>Status</th>
+                                <th>Amount</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for order in recent_orders %}
+                            <tr>
+                                <td>#{{ order.id }}</td>
+                                <td>{{ order.customer.username }}</td>
+                                <td>
+                                    <span class="status-badge status-{{ order.status }}">
+                                        {{ order.status }}
+                                    </span>
+                                </td>
+                                <td>${{ "%.2f"|format(order.total_amount) }}</td>
+                                <td>
+                                    <a href="{{ url_for('shop.order_details', order_id=order.id) }}" 
+                                       class="action-btn action-secondary">Details</a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="dashboard-card">
+                <h3>Low Stock Products</h3>
+                <div class="table-responsive">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Product</th>
+                                <th>Current Stock</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for product in low_stock_products %}
+                            <tr>
+                                <td>{{ product.name }}</td>
+                                <td>
+                                    <span class="{% if product.stock < 5 %}text-danger{% else %}text-warning{% endif %}">
+                                        {{ product.stock }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <a href="{{ url_for('shop.edit_product', product_id=product.id) }}"
+                                       class="action-btn action-primary">Update Stock</a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="dashboard-card">
+        <h3>Quick Actions</h3>
+        <div class="quick-actions">
+            <a href="{{ url_for('shop.add_product', shop_id=shop.id) }}" class="action-btn action-primary">Add New Product</a>
+            <a href="{{ url_for('shop.settings') }}" class="action-btn action-secondary">Shop Settings</a>
+            <a href="{{ url_for('shop.negotiation_settings') }}" class="action-btn action-secondary">Negotiation Settings</a>
+            <a href="{{ url_for('shop.inventory') }}" class="action-btn action-secondary">Inventory Management</a>
+        </div>
+    </div>
+</div>
+{% endblock %}

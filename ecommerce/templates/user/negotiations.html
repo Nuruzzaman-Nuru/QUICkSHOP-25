@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+
+{% block title %}My Negotiations{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="mb-0">My Negotiations</h3>
+                </div>
+                <div class="card-body">
+                    {% if negotiations %}
+                        <div class="table-responsive">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>Product</th>
+                                        <th>Original Price</th>
+                                        <th>Your Offer</th>
+                                        <th>Counter Offer</th>
+                                        <th>Final Price</th>
+                                        <th>Status</th>
+                                        <th>Rounds</th>
+                                        <th>Last Updated</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for nego in negotiations %}
+                                    <tr>
+                                        <td>{{ nego.product.name }}</td>
+                                        <td>${{ "%.2f"|format(nego.initial_price) }}</td>
+                                        <td>${{ "%.2f"|format(nego.offered_price) }}</td>
+                                        <td>
+                                            {% if nego.counter_price %}
+                                                ${{ "%.2f"|format(nego.counter_price) }}
+                                            {% else %}
+                                                -
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if nego.final_price %}
+                                                ${{ "%.2f"|format(nego.final_price) }}
+                                            {% else %}
+                                                -
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <span class="badge bg-{{ 'success' if nego.status == 'accepted' 
+                                                else 'warning' if nego.status == 'pending' or nego.status == 'counter_offer'
+                                                else 'danger' }}">
+                                                {{ nego.status|replace('_', ' ')|title }}
+                                            </span>
+                                        </td>
+                                        <td>{{ nego.rounds }}</td>
+                                        <td>{{ nego.updated_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                                        <td>
+                                            {% if nego.status in ['pending', 'counter_offer'] %}
+                                                <a href="{{ url_for('user.negotiation_detail', nego_id=nego.id) }}" 
+                                                   class="btn btn-sm btn-primary">Continue</a>
+                                            {% else %}
+                                                <a href="{{ url_for('user.negotiation_detail', nego_id=nego.id) }}" 
+                                                   class="btn btn-sm btn-secondary">View</a>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <div class="text-center py-4">
+                            <p class="text-muted">You don't have any negotiations yet.</p>
+                            <a href="{{ url_for('shop.index') }}" class="btn btn-primary">Browse Shops</a>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

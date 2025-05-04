@@ -1,0 +1,586 @@
+from flask import Blueprint, jsonify, request, session
+from flask_login import login_required, current_user
+from ..models.user import User
+from ..models.shop import Shop, Product
+from ..models.order import Order, OrderItem
+from ..models.negotiation import Negotiation
+from ..utils.ai.negotiation_bot import create_negotiation_session
+from ..utils.notifications import (
+    notify_shop_owner_new_order,
+    notify_customer_order_status,
+    notify_admin_order_status
+)
+from .. import db
+
+api_bp = Blueprint('api', __name__, url_prefix='/api')
+
+def init_cart():
+    """Initialize cart in session if it doesn't exist"""
+    if 'cart' not in session:
+        session['cart'] = {}
+        session.modified = True
+    return session['cart']
+
+@api_bp.route('/delivery/location/<int:delivery_person_id>')
+def get_delivery_location(delivery_person_id):
+    delivery_person = User.query.get_or_404(delivery_person_id)
+    if not delivery_person.is_delivery_person:
+        return jsonify({
+            'status': 'error',
+            'message': 'Invalid delivery person ID'
+        }), 400
+    
+    return jsonify({
+        'status': 'success',
+        'location': {
+            'lat': delivery_person.location_lat,
+            'lng': delivery_person.location_lng,
+            'last_updated': delivery_person.updated_at.isoformat()
+        }
+    })
+
+@api_bp.route('/admin/delivery-status')
+@login_required
+def delivery_status():
+    if not current_user.is_admin:
+        return jsonify({
+            'status': 'error',
+            'message': 'Admin access required'
+        }), 403
+    
+    delivery_persons = User.query.filter_by(role='delivery').all()
+    status_data = []
+    
+    for person in delivery_persons:
+        current_order = Order.query.filter_by(
+            delivery_person_id=person.id,
+            status='in_delivery'
+        ).first()
+        
+        status_data.append({
+            'username': person.username,
+            'status': 'active' if current_order else 'available',
+            'currentOrder': f'#{current_order.id}' if current_order else None,
+            'lastUpdated': person.updated_at.isoformat() if hasattr(person, 'updated_at') else None
+        })
+    
+    return jsonify({
+        'status': 'success',
+        'deliveryPersons': status_data
+    })
+
+@api_bp.route('/admin/dashboard-stats')
+@login_required
+def dashboard_stats():
+    if not current_user.is_admin:
+        return jsonify({
+            'status': 'error',
+            'message': 'Admin access required'
+        }), 403
+    
+    try:
+        # Get current stats
+        pending_orders = Order.query.filter_by(status='pending').count()
+        active_deliveries = Order.query.filter_by(status='in_delivery').count()
+        
+        # Get recent orders
+        recent_orders = Order.query.order_by(Order.created_at.desc()).limit(10).all()
+        
+        return jsonify({
+            'status': 'success',
+            'pending_orders': pending_orders,
+            'active_deliveries': active_deliveries,
+            'recent_orders': [order.to_dict() for order in recent_orders]
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+@api_bp.route('/add', methods=['POST'])
+@login_required
+def add_to_cart():
+    try:
+        init_cart()
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({
+                'status': 'error',
+                'message': 'Invalid request data'
+            }), 400
+
+        product_id = str(data.get('product_id'))
+        quantity = int(data.get('quantity', 1))
+        negotiated_price = data.get('negotiated_price')
+        
+        # Validate product exists
+        product = Product.query.get_or_404(product_id)
+        
+        # Check if product is still available
+        if not product.stock:
+            return jsonify({
+                'status': 'error',
+                'message': 'Product is out of stock'
+            }), 400
+        
+        # Check if requested quantity is available
+        if product.stock < quantity:
+            return jsonify({
+                'status': 'error',
+                'message': f'Only {product.stock} items available'
+            }), 400
+        
+        # Get current cart quantity if product exists
+        current_quantity = session['cart'].get(product_id, {}).get('quantity', 0)
+        
+        # Check if total quantity exceeds stock
+        if (current_quantity + quantity) > product.stock:
+            return jsonify({
+                'status': 'error',
+                'message': f'Cannot add {quantity} more items. Only {product.stock - current_quantity} available'
+            }), 400
+        
+        if product_id in session['cart']:
+            # Update existing cart item
+            session['cart'][product_id]['quantity'] += quantity
+        else:
+            # Add new cart item
+            session['cart'][product_id] = {
+                'quantity': quantity,
+                'price': negotiated_price if negotiated_price else float(product.price),
+                'name': product.name  # Add product name for display
+            }
+        
+        session.modified = True
+        
+        return jsonify({
+            'status': 'success',
+            'message': 'Product added to cart',
+            'cart_count': sum(item['quantity'] for item in session['cart'].values())
+        })
+        
+    except ValueError as e:
+        return jsonify({
+            'status': 'error',
+            'message': 'Invalid quantity specified'
+        }), 400
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+@api_bp.route('/update', methods=['POST'])
+@login_required
+def update_cart():
+    data = request.get_json()
+    product_id = str(data.get('product_id'))
+    quantity = int(data.get('quantity'))
+    
+    if quantity <= 0:
+        if product_id in session['cart']:
+            del session['cart'][product_id]
+    else:
+        product = Product.query.get_or_404(product_id)
+        if product.stock < quantity:
+            return jsonify({
+                'status': 'error',
+                'message': 'Not enough stock available'
+            }), 400
+            
+        if product_id in session['cart']:
+            session['cart'][product_id]['quantity'] = quantity
+    
+    session.modified = True
+    
+    return jsonify({
+        'status': 'success',
+        'message': 'Cart updated'
+    })
+
+@api_bp.route('/remove', methods=['POST'])
+@login_required
+def remove_from_cart():
+    data = request.get_json()
+    product_id = str(data.get('product_id'))
+    
+    if product_id in session['cart']:
+        del session['cart'][product_id]
+        session.modified = True
+    
+    return jsonify({
+        'status': 'success',
+        'message': 'Item removed from cart'
+    })
+
+@api_bp.route('/checkout', methods=['POST'])
+@login_required
+def checkout():
+    init_cart()
+    data = request.get_json()
+    selected_items = data.get('selected_items', [])
+    
+    if not selected_items:
+        return jsonify({
+            'status': 'error',
+            'message': 'No items selected for checkout'
+        }), 400
+    
+    # Get shipping address from session
+    shipping = session.get('cart_shipping', {})
+    if not shipping:
+        return jsonify({
+            'status': 'error',
+            'message': 'Please select a shipping address'
+        }), 400
+    
+    # Group selected items by shop
+    shop_orders = {}
+    cart = session['cart']
+    
+    for item_id in selected_items:
+        if item_id not in cart:
+            continue
+            
+        item = cart[item_id]
+        product = Product.query.get(item_id)
+        if not product or product.stock < item['quantity']:
+            return jsonify({
+                'status': 'error',
+                'message': f'Not enough stock for {product.name}'
+            }), 400
+            
+        if product.shop_id not in shop_orders:
+            shop_orders[product.shop_id] = []
+            
+        shop_orders[product.shop_id].append({
+            'product': product,
+            'quantity': item['quantity'],
+            'price': item['price']
+        })
+    
+    try:
+        # Create separate orders for each shop
+        orders = []
+        for shop_id, items in shop_orders.items():
+            order = Order(
+                customer_id=current_user.id,
+                shop_id=shop_id,
+                delivery_address=shipping['address'],
+                delivery_lat=shipping['lat'],
+                delivery_lng=shipping['lng']
+            )
+            order.special_instructions = data.get('special_instructions', '')
+            db.session.add(order)
+            
+            # Add items to order
+            total_amount = 0
+            for item in items:
+                order_item = OrderItem(
+                    order=order,
+                    product_id=item['product'].id,
+                    quantity=item['quantity'],
+                    price=item['price']
+                )
+                db.session.add(order_item)
+                
+                # Update product stock
+                item['product'].stock -= item['quantity']
+                total_amount += item['quantity'] * item['price']
+            
+            order.total_amount = total_amount
+            orders.append(order)
+        
+        db.session.commit()
+        
+        # Remove checked out items from cart
+        for item_id in selected_items:
+            if item_id in session['cart']:
+                del session['cart'][item_id]
+        session.modified = True
+        
+        # Send notifications
+        for order in orders:
+            notify_shop_owner_new_order(order)
+            notify_customer_order_status(order)
+            notify_admin_order_status(order, {
+                'old': None,
+                'new': 'pending',
+                'action': 'order_created'
+            })
+        
+        return jsonify({
+            'status': 'success',
+            'message': 'Orders placed successfully',
+            'order_ids': [order.id for order in orders]
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+@api_bp.route('/cart/count')
+@login_required
+def get_cart_count():
+    cart = init_cart()
+    count = sum(item['quantity'] for item in cart.values())
+    return jsonify({
+        'status': 'success',
+        'count': count
+    })
+
+@api_bp.route('/cart/items')
+@login_required
+def get_cart_items():
+    cart = init_cart()
+    items = []
+    total = 0
+    
+    for product_id, item in cart.items():
+        product = Product.query.get(product_id)
+        if product:
+            price = item['price']
+            quantity = item['quantity']
+            subtotal = price * quantity
+            total += subtotal
+            
+            items.append({
+                'id': product_id,
+                'name': product.name,
+                'price': price,
+                'quantity': quantity,
+                'subtotal': subtotal,
+                'shop_id': product.shop_id,
+                'shop_name': product.shop.name
+            })
+    
+    return jsonify({
+        'status': 'success',
+        'items': items,
+        'total': total
+    })
+
+@api_bp.route('/cart/change', methods=['POST'])
+@login_required
+def notify_cart_change():
+    """Notify about cart changes for real-time updates"""
+    init_cart()
+    data = request.get_json()
+    action = data.get('action')
+    product_id = str(data.get('product_id', ''))
+    
+    if action not in ['add', 'remove', 'update', 'clear']:
+        return jsonify({
+            'status': 'error',
+            'message': 'Invalid action'
+        }), 400
+    
+    if action == 'clear':
+        session['cart'] = {}
+        session.modified = True
+    
+    count = sum(item['quantity'] for item in session['cart'].values())
+    total = sum(item['quantity'] * item['price'] for item in session['cart'].values())
+    
+    return jsonify({
+        'status': 'success',
+        'cart': {
+            'count': count,
+            'total': total,
+            'action': action,
+            'product_id': product_id
+        }
+    })
+
+@api_bp.route('/cart/apply-voucher', methods=['POST'])
+@login_required
+def apply_voucher():
+    """Apply a voucher code to the cart"""
+    data = request.get_json()
+    code = data.get('code')
+    
+    if not code:
+        return jsonify({
+            'status': 'error',
+            'message': 'Voucher code is required'
+        }), 400
+    
+    # TODO: Add voucher validation logic
+    # For now, return error for any code
+    return jsonify({
+        'status': 'error',
+        'message': 'Invalid or expired voucher code'
+    }), 400
+
+@api_bp.route('/cart/batch-delete', methods=['POST'])
+@login_required
+def batch_delete_cart_items():
+    """Delete multiple items from cart at once"""
+    data = request.get_json()
+    item_ids = data.get('item_ids', [])
+    
+    cart = init_cart()
+    for item_id in item_ids:
+        if str(item_id) in cart:
+            del cart[str(item_id)]
+    
+    session.modified = True
+    
+    return jsonify({
+        'status': 'success',
+        'message': 'Items removed from cart'
+    })
+
+@api_bp.route('/cart/shipping-address', methods=['GET', 'POST'])
+@login_required
+def cart_shipping_address():
+    """Get or update shipping address for cart"""
+    if request.method == 'POST':
+        data = request.get_json()
+        address = data.get('address')
+        lat = data.get('lat')
+        lng = data.get('lng')
+        
+        if not all([address, lat, lng]):
+            return jsonify({
+                'status': 'error',
+                'message': 'Address and coordinates are required'
+            }), 400
+        
+        session['cart_shipping'] = {
+            'address': address,
+            'lat': float(lat),
+            'lng': float(lng)
+        }
+        session.modified = True
+        
+        return jsonify({
+            'status': 'success',
+            'message': 'Shipping address updated'
+        })
+    
+    # GET request - return current shipping address
+    shipping = session.get('cart_shipping', {})
+    return jsonify({
+        'status': 'success',
+        'address': shipping.get('address'),
+        'lat': shipping.get('lat'),
+        'lng': shipping.get('lng')
+    })
+
+@api_bp.route('/negotiate/<int:product_id>', methods=['POST'])
+@login_required
+def negotiate_price(product_id):
+    try:
+        product = Product.query.get_or_404(product_id)
+        
+        if not product.is_negotiable():
+            return jsonify({
+                'status': 'error',
+                'message': 'This product does not support price negotiation'
+            }), 400
+        
+        data = request.get_json()
+        if not data or 'offered_price' not in data:
+            return jsonify({
+                'status': 'error',
+                'message': 'Please enter a valid offer amount'
+            }), 400
+        
+        try:
+            offered_price = float(data['offered_price'])
+            if offered_price <= 0:
+                raise ValueError()
+        except (TypeError, ValueError):
+            return jsonify({
+                'status': 'error',
+                'message': 'Please enter a valid positive number for the offer'
+            }), 400
+        
+        # Get or create negotiation session
+        negotiation = Negotiation.query.filter_by(
+            product_id=product_id,
+            customer_id=current_user.id,
+            status='pending'
+        ).first()
+        
+        if not negotiation:
+            negotiation = Negotiation(
+                product_id=product_id,
+                customer_id=current_user.id,
+                initial_price=product.price,
+                offered_price=offered_price
+            )
+            db.session.add(negotiation)
+        else:
+            negotiation.offered_price = offered_price
+            negotiation.rounds += 1
+        
+        # Process with AI negotiation bot
+        bot = create_negotiation_session(product)
+        decision, counter_offer, message = bot.evaluate_offer(offered_price)
+        
+        if decision == 'accept':
+            negotiation.accept_offer(offered_price)
+        elif decision == 'reject':
+            negotiation.reject_offer()
+        else:  # counter
+            negotiation.add_counter_offer(counter_offer)
+            
+        db.session.commit()
+        
+        return jsonify({
+            'status': 'success',
+            'decision': decision,
+            'message': message,
+            'counter_offer': counter_offer,
+            'negotiation': negotiation.to_dict()
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        # Log the actual error for debugging
+        print(f"Negotiation error: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': 'Sorry, there was an error processing your offer. Please try again.'
+        }), 500
+
+@api_bp.route('/negotiation/<int:negotiation_id>/accept', methods=['POST'])
+@login_required
+def accept_negotiation(negotiation_id):
+    negotiation = Negotiation.query.get_or_404(negotiation_id)
+    
+    if negotiation.customer_id != current_user.id:
+        return jsonify({
+            'status': 'error',
+            'message': 'Access denied'
+        }), 403
+    
+    if negotiation.status not in ['pending', 'counter_offer']:
+        return jsonify({
+            'status': 'error',
+            'message': 'This negotiation is no longer active'
+        }), 400
+    
+    # Accept the last counter offer
+    if negotiation.counter_price:
+        negotiation.accept_offer(negotiation.counter_price)
+        db.session.commit()
+        
+        return jsonify({
+            'status': 'success',
+            'message': 'Negotiation accepted',
+            'final_price': negotiation.final_price
+        })
+    else:
+        return jsonify({
+            'status': 'error',
+            'message': 'No counter offer available'
+        }), 400

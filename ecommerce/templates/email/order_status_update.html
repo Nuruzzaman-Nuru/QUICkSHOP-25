@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: #f8f9fa; padding: 20px; text-align: center; }
+        .content { padding: 20px; }
+        .status { display: inline-block; padding: 5px 10px; border-radius: 4px; font-weight: bold; }
+        .status-pending { background: #ffeeba; color: #856404; }
+        .status-confirmed { background: #b8daff; color: #004085; }
+        .status-delivering { background: #c3e6cb; color: #155724; }
+        .status-completed { background: #d4edda; color: #155724; }
+        .footer { text-align: center; padding: 20px; font-size: 0.9em; color: #6c757d; }
+        .button { display: inline-block; padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h2>Order Status Update</h2>
+        </div>
+        
+        <div class="content">
+            <p>Dear {{ order.customer.username }},</p>
+            
+            <p>Your order #{{ order.id }} status has been updated:</p>
+            
+            <p>
+                <span class="status status-{{ order.status }}">
+                    {{ order.status|title }}
+                </span>
+            </p>
+            
+            {% if order.status == 'confirmed' %}
+                <p>Your order has been confirmed and is being prepared by {{ order.shop.name }}.</p>
+            {% elif order.status == 'delivering' %}
+                <p>Your order is on its way!</p>
+                {% if order.estimated_delivery_time %}
+                    <p>Estimated delivery time: {{ order.estimated_delivery_time.strftime('%I:%M %p') }}</p>
+                {% endif %}
+                {% if order.delivery_person %}
+                    <p>Delivery Person: {{ order.delivery_person.username }}</p>
+                {% endif %}
+            {% elif order.status == 'completed' %}
+                <p>Your order has been delivered successfully. Thank you for shopping with us!</p>
+            {% endif %}
+            
+            <div style="margin: 20px 0;">
+                <p><strong>Order Summary:</strong></p>
+                <ul>
+                    {% for item in order.items %}
+                    <li>
+                        {{ item.quantity }}x {{ item.product.name }} 
+                        ({% if item.negotiated_price %}
+                            ${{ "%.2f"|format(item.negotiated_price) }} each - Negotiated Price
+                        {% else %}
+                            ${{ "%.2f"|format(item.price) }} each
+                        {% endif %})
+                    </li>
+                    {% endfor %}
+                </ul>
+                <p><strong>Total Amount:</strong> ${{ "%.2f"|format(order.total_amount) }}</p>
+                <p><strong>Delivery Address:</strong> {{ order.delivery_address }}</p>
+            </div>
+            
+            <p>
+                <a href="{{ url_for('user.track_order', order_id=order.id, _external=True) }}" class="button">
+                    Track Order
+                </a>
+            </p>
+        </div>
+        
+        <div class="footer">
+            <p>Thank you for shopping with us!</p>
+            <p>If you have any questions, please contact our support team.</p>
+        </div>
+    </div>
+</body>
+</html>

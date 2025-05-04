@@ -1,0 +1,693 @@
+/* Reset and base styles */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html {
+    height: 100%;
+}
+
+body {
+    font-family: 'Poppins', sans-serif;
+    background-color: #f5f5f5;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Logo styles */
+.logo {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    text-decoration: none;
+}
+
+.logo-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    color: #2D3748;
+}
+
+.logo-text {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #2D3748;
+    text-transform: lowercase;
+    letter-spacing: -0.5px;
+}
+
+/* Layout */
+.nav-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 2rem;
+    background: white;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.nav-links {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+}
+
+.nav-links a {
+    color: #4a5568;
+    text-decoration: none;
+    font-weight: 500;
+}
+
+/* Main content area */
+main {
+    flex: 1 0 auto;
+    padding: 2rem;
+    width: 100%;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+/* Navbar customization */
+.navbar {
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    width: 100%;
+}
+
+.navbar-brand {
+    font-size: 1.5rem;
+    font-weight: 500;
+}
+
+.navbar-brand .bi {
+    font-size: 1.25em;
+    vertical-align: -0.125em;
+}
+
+/* Login section styles */
+.auth-section {
+    position: relative;
+    min-height: calc(100vh - 72px);
+    background-image: url("https://media3.giphy.com/media/doXBzUFJRxpaUbuaqz/giphy.gif?cid=ecf05e47tnfhjh0lx85djen7gvd23j7a9xw532au3zse8j0c&ep=v1_gifs_related&rid=giphy.gif&ct=g");
+    background-size: cover;
+    background-repeat: no-repeat;
+    padding: 4rem 0;
+}
+
+.auth-section::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(135deg, rgba(0, 20, 50, 0.9), rgba(0, 10, 30, 0.8));
+    z-index: 1;
+}
+
+.auth-section .container {
+    position: relative;
+    z-index: 2;
+}
+
+/* Login card styles */
+.auth-card {
+    background: rgba(255, 255, 255, 0.95);
+    border: none;
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    max-width: 480px;
+    margin: 0 auto;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.auth-card .card-header {
+    background: none;
+    border-bottom: none;
+    padding-top: 2.5rem;
+    padding-bottom: 1.5rem;
+}
+
+.auth-card .card-header h3 {
+    font-size: 1.75rem;
+    font-weight: 600;
+    color: #2d3748;
+    margin: 0;
+}
+
+.auth-card .form-control {
+    border-radius: 8px;
+    padding: 0.875rem 1rem;
+    border: 1.5px solid rgba(66, 153, 225, 0.3);
+    font-size: 1rem;
+    transition: all 0.2s ease;
+    background: rgba(255, 255, 255, 0.9);
+    color: #2d3748;
+}
+
+.auth-card .form-control:focus {
+    border-color: #4299e1;
+    box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.15);
+    background: #ffffff;
+}
+
+.auth-card .btn-primary {
+    padding: 0.875rem;
+    font-weight: 500;
+    border-radius: 8px;
+    font-size: 1rem;
+    transition: all 0.3s ease;
+    background: #4299e1;
+    border: none;
+    letter-spacing: 0.5px;
+}
+
+.auth-card .btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(66, 153, 225, 0.3);
+    background: #3182ce;
+}
+
+.auth-card .form-label {
+    font-weight: 500;
+    color: #4a5568;
+    margin-bottom: 0.5rem;
+}
+
+.auth-card .form-check {
+    padding-left: 1.75rem;
+}
+
+.auth-card .form-check-input {
+    width: 1.25rem;
+    height: 1.25rem;
+    margin-left: -1.75rem;
+    margin-top: 0.125rem;
+    border: 1.5px solid #cbd5e0;
+    cursor: pointer;
+}
+
+.auth-card .form-check-input:checked {
+    background-color: #4299e1;
+    border-color: #4299e1;
+}
+
+.auth-link {
+    color: #4299e1;
+    text-decoration: none;
+    font-weight: 500;
+    transition: color 0.2s ease;
+}
+
+.auth-link:hover {
+    color: #3182ce;
+    text-decoration: none;
+}
+
+/* Alert customization */
+.alert {
+    border: none;
+    border-radius: 8px;
+    font-weight: 500;
+}
+
+.alert-dismissible .btn-close {
+    padding: 1rem;
+}
+
+/* Glassmorphism effects */
+.auth-card {
+    background: rgba(255, 255, 255, 0.9);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+/* Role-specific Dashboard Styles */
+.dashboard-container {
+    display: grid;
+    gap: 2rem;
+    padding: 2rem;
+    background-color: #f8fafc;
+}
+
+/* Common dashboard card styles */
+.dashboard-card {
+    background: white;
+    border-radius: 8px;
+    padding: 1.5rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    margin-bottom: 1.5rem;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.dashboard-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+
+/* Admin specific styles */
+.admin-controls {
+    background: linear-gradient(135deg, #1e40af, #1e3a8a);
+    color: white;
+    padding: 1.5rem;
+    border-radius: 10px;
+    margin-bottom: 2rem;
+}
+
+.admin-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+/* Delivery Man specific styles */
+.delivery-status {
+    background: linear-gradient(135deg, #059669, #047857);
+    color: white;
+    padding: 1rem;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+}
+
+.order-card {
+    border-left: 4px solid #059669;
+}
+
+/* Shop Owner specific styles */
+.shop-analytics {
+    background: linear-gradient(135deg, #7c3aed, #6d28d9);
+    color: white;
+    padding: 1.5rem;
+    border-radius: 10px;
+    margin-bottom: 2rem;
+}
+
+.product-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 1.5rem;
+    margin: 2rem 0;
+}
+
+/* Customer specific styles */
+.order-history {
+    background: #ffffff;
+    border-radius: 10px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.negotiation-chat {
+    background: #ffffff;
+    border-radius: 10px;
+    padding: 1rem;
+    border: 1px solid #e2e8f0;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+/* Table Styles */
+.table-responsive {
+    overflow-x: auto;
+}
+
+.table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.table th, .table td {
+    padding: 0.75rem;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+/* Status indicators */
+.status-badge {
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+.status-pending {
+    background-color: #fef3c7;
+    color: #92400e;
+}
+
+.status-confirmed {
+    background-color: #dcfce7;
+    color: #166534;
+}
+
+.status-delivering {
+    background-color: #dbeafe;
+    color: #1e40af;
+}
+
+.status-completed {
+    background-color: #f0fdf4;
+    color: #15803d;
+}
+
+/* Action buttons */
+.action-btn {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    font-weight: 500;
+    text-decoration: none;
+    transition: background-color 0.2s;
+}
+
+.action-primary {
+    background-color: #4f46e5;
+    color: white;
+}
+
+.action-primary:hover {
+    background-color: #4338ca;
+}
+
+.action-secondary {
+    background-color: #f3f4f6;
+    color: #374151;
+}
+
+.action-secondary:hover {
+    background-color: #e5e7eb;
+}
+
+/* Navigation indicators */
+.role-indicator {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.5rem 1rem;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    font-weight: 500;
+    margin-left: 1rem;
+}
+
+/* Footer styles */
+footer {
+    flex-shrink: 0;
+    background: white;
+    padding: 1.5rem 0;
+    margin-top: auto;
+    box-shadow: 0 -2px 4px rgba(0,0,0,0.1);
+}
+
+footer.bg-info {
+    background-color: #0099e5 !important;
+}
+
+footer .contact-info i {
+    font-size: 1.5rem;
+}
+
+footer .social-links a {
+    transition: opacity 0.2s;
+}
+
+footer .social-links a:hover {
+    opacity: 0.8;
+}
+
+footer h5 {
+    font-weight: 600;
+    position: relative;
+    padding-bottom: 0.5rem;
+}
+
+footer h5::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    width: 50px;
+    height: 2px;
+    background-color: rgba(255, 255, 255, 0.3);
+}
+
+footer ul li a {
+    transition: padding-left 0.2s;
+}
+
+footer ul li a:hover {
+    padding-left: 5px;
+}
+
+.payment-methods img, .app-download img {
+    transition: transform 0.2s;
+}
+
+.payment-methods img:hover, .app-download img:hover {
+    transform: translateY(-2px);
+}
+
+/* Container for content sections */
+.content-container {
+    width: 100%;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 1rem;
+}
+
+/* Card and form layouts */
+.card {
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+/* Form layout */
+.form-container {
+    max-width: 500px;
+    margin: 2rem auto;
+    padding: 2rem;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+/* Banner Styles */
+.banner-section {
+    position: relative;
+    width: 100%;
+    height: 300px;
+    background: linear-gradient(135deg, #1b2337, #2a3752);
+    overflow: hidden;
+    margin-bottom: 2rem;
+    border-radius: 12px;
+}
+
+.banner-content {
+    position: relative;
+    z-index: 2;
+    padding: 3rem;
+    color: white;
+    max-width: 100%;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+}
+
+.banner-title {
+    font-size: 2.5rem;
+    font-weight: 700;
+    margin-bottom: 1rem;
+    color: white;
+}
+
+.banner-subtitle {
+    font-size: 1.8rem;
+    margin-bottom: 1.5rem;
+    color: #4cd3c2;
+}
+
+.banner-dots {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 8px;
+}
+
+.banner-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.5);
+    cursor: pointer;
+}
+
+.banner-dot.active {
+    background: white;
+}
+
+/* Features section */
+.features .card {
+    transition: transform 0.3s ease;
+}
+
+.features .card:hover {
+    transform: translateY(-5px);
+}
+
+.features .bi {
+    font-size: 2.5rem;
+    color: #4299e1;
+}
+
+/* CTA section */
+.cta {
+    background-color: #f8fafc;
+}
+
+/* Footer */
+footer {
+    margin-top: auto;
+    padding: 2rem 0;
+    background-color: #1b2337;
+    color: white;
+}
+
+/* Payment methods section styling */
+.payment-section {
+    background-color: #0099e5;
+    padding: 15px;
+    border-radius: 4px;
+}
+
+.payment-methods {
+    margin-top: 1rem;
+}
+
+.method-row {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-start;
+}
+
+.payment-logo {
+    background: white;
+    border-radius: 4px;
+    padding: 8px;
+    width: 70px;
+    height: 45px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.2s ease;
+}
+
+.payment-logo img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.payment-logo:hover {
+    transform: translateY(-2px);
+}
+
+/* Specific payment logo styles */
+.payment-logo.bkash img {
+    max-width: 85%;
+}
+
+.payment-logo.nagad img {
+    max-width: 90%;
+}
+
+.payment-logo.rocket img {
+    max-width: 85%;
+}
+
+.payment-logo.visa img {
+    max-width: 95%;
+}
+
+.payment-logo.mastercard img {
+    max-width: 95%;
+}
+
+/* Responsive payment methods */
+@media (max-width: 768px) {
+    .method-row {
+        justify-content: center;
+    }
+    
+    .payment-logo {
+        width: 60px;
+        height: 40px;
+    }
+}
+
+/* Responsive styles */
+@media (max-width: 768px) {
+    .banner-section {
+        height: 250px;
+        padding: 1.5rem 0;
+    }
+
+    .banner-content {
+        padding: 1.5rem;
+    }
+
+    .banner-title {
+        font-size: 2rem;
+    }
+
+    .banner-subtitle {
+        font-size: 1.4rem;
+    }
+
+    .features .card {
+        margin-bottom: 1rem;
+    }
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .nav-container {
+        flex-direction: column;
+        padding: 1rem;
+    }
+    
+    .nav-links {
+        flex-direction: column;
+        width: 100%;
+    }
+    
+    .dashboard-container {
+        padding: 1rem;
+    }
+    
+    .admin-stats {
+        grid-template-columns: 1fr;
+    }
+    
+    .product-grid {
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    }
+    
+    main {
+        padding: 1rem;
+    }
+}

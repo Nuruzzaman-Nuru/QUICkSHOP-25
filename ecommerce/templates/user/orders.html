@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}My Orders{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12">
+        <h2>My Orders</h2>
+        <div class="btn-group mb-3">
+            <a href="{{ url_for('user.orders') }}" class="btn btn-{{ 'primary' if not request.args.get('status') else 'outline-primary' }}">All</a>
+            <a href="{{ url_for('user.orders', status='pending') }}" class="btn btn-{{ 'primary' if request.args.get('status') == 'pending' else 'outline-primary' }}">Pending</a>
+            <a href="{{ url_for('user.orders', status='in_delivery') }}" class="btn btn-{{ 'primary' if request.args.get('status') == 'in_delivery' else 'outline-primary' }}">In Delivery</a>
+            <a href="{{ url_for('user.orders', status='delivered') }}" class="btn btn-{{ 'primary' if request.args.get('status') == 'delivered' else 'outline-primary' }}">Delivered</a>
+        </div>
+
+        {% if orders %}
+            <div class="table-responsive">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>Order ID</th>
+                            <th>Shop</th>
+                            <th>Total Amount</th>
+                            <th>Status</th>
+                            <th>Date</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for order in orders %}
+                            <tr>
+                                <td>#{{ order.id }}</td>
+                                <td>{{ order.shop.name }}</td>
+                                <td>${{ "%.2f"|format(order.total_amount) }}</td>
+                                <td>
+                                    <span class="badge bg-{{ 'primary' if order.status == 'pending' else 'info' if order.status == 'in_delivery' else 'success' }}">
+                                        {{ order.status|replace('_', ' ')|title }}
+                                    </span>
+                                </td>
+                                <td>{{ order.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                                <td>
+                                    <a href="{{ url_for('user.order_detail', order_id=order.id) }}" class="btn btn-sm btn-primary">View Details</a>
+                                    {% if order.status == 'in_delivery' %}
+                                        <a href="{{ url_for('user.track_order', order_id=order.id) }}" class="btn btn-sm btn-info">Track Order</a>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p>No orders found.</p>
+            <a href="{{ url_for('shop.index') }}" class="btn btn-primary">Browse Shops</a>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

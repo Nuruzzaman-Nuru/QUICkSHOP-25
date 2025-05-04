@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+
+{% block title %}Customer Dashboard{% endblock %}
+
+{% block content %}
+<div class="dashboard-container">
+    <div class="customer-welcome mb-4">
+        <h1>Welcome, {{ current_user.username }}</h1>
+    </div>
+
+    <!-- Quick Actions Section -->
+    <div class="mb-4">
+        <h2 class="mb-3">Quick Actions</h2>
+        <div class="d-flex flex-wrap gap-3">
+            <a href="{{ url_for('main.cart') }}" class="btn btn-primary">
+                <i class="bi bi-cart me-2"></i>View Cart
+            </a>
+            <a href="{{ url_for('user.settings') }}" class="btn btn-secondary">
+                <i class="bi bi-gear me-2"></i>Account Settings
+            </a>
+           
+            <a href="{{ url_for('user.orders') }}" class="btn btn-secondary">
+                <i class="bi bi-clock-history me-2"></i>Order History
+            </a>
+        </div>
+    </div>
+
+    <div class="admin-stats">
+        <div class="dashboard-card">
+            <h3>Active Orders</h3>
+            <p class="stat-number">{{ active_orders_count }}</p>
+            <a href="{{ url_for('user.orders') }}" class="action-btn action-primary">View Orders</a>
+        </div>
+
+        <div class="dashboard-card">
+            <h3>Cart Items</h3>
+            <p class="stat-number">{{ cart_items_count }}</p>
+            <a href="{{ url_for('main.cart') }}" class="action-btn action-primary">View Cart</a>
+        </div>
+
+        <div class="dashboard-card">
+            <h3>Pending Negotiations</h3>
+            <p class="stat-number">{{ pending_negotiations_count }}</p>
+            <a href="{{ url_for('user.negotiations') }}" class="action-btn action-primary">View Negotiations</a>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-6">
+            <div class="dashboard-card">
+                <h3>Recent Orders</h3>
+                <div class="table-responsive">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Order ID</th>
+                                <th>Shop</th>
+                                <th>Status</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for order in recent_orders %}
+                            <tr>
+                                <td>#{{ order.id }}</td>
+                                <td>{{ order.shop.name }}</td>
+                                <td>
+                                    <span class="status-badge status-{{ order.status }}">
+                                        {{ order.status }}
+                                    </span>
+                                </td>
+                                <td>
+                                    {% if order.status in ['delivering', 'confirmed'] %}
+                                        <a href="{{ url_for('user.track_order', order_id=order.id) }}" 
+                                           class="action-btn action-primary">Track</a>
+                                    {% else %}
+                                        <a href="{{ url_for('user.order_detail', order_id=order.id) }}" 
+                                           class="action-btn action-secondary">Details</a>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="dashboard-card">
+                <h3>Active Negotiations</h3>
+                <div class="table-responsive">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Product</th>
+                                <th>Original Price</th>
+                                <th>Your Offer</th>
+                                <th>Status</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for nego in active_negotiations %}
+                            <tr>
+                                <td>{{ nego.product.name }}</td>
+                                <td>${{ "%.2f"|format(nego.product.price) }}</td>
+                                <td>${{ "%.2f"|format(nego.offered_price) }}</td>
+                                <td>
+                                    <span class="status-badge status-{{ nego.status }}">
+                                        {{ nego.status }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <button onclick="viewNegotiation('{{ nego.id }}')"
+                                            class="action-btn action-primary">Continue</button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-12">
+            <div class="dashboard-card">
+          
+                <div class="shop-grid">
+                    {% for shop in nearby_shops %}
+                    <div class="shop-card">
+                        <h4>{{ shop.name }}</h4>
+                        <p>{{ shop.description[:100] }}...</p>
+                        <p><small>{{ "%.1f"|format(shop.distance) }} km away</small></p>
+                        <a href="{{ url_for('shop.view', shop_id=shop.id) }}" 
+                           class="action-btn action-primary">Visit Shop</a>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function viewNegotiation(negoId) {
+    window.location.href = '/user/negotiation/' + negoId;
+}
+</script>
+{% endblock %}

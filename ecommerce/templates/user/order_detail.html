@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+
+{% block title %}Order #{{ order.id }} Details{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8">
+        <h2>Order #{{ order.id }} Details</h2>
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="card-title">Order Status</h5>
+                    <span class="badge bg-{{ 'primary' if order.status == 'pending' else 'info' if order.status == 'in_delivery' else 'success' }}">
+                        {{ order.status|replace('_', ' ')|title }}
+                    </span>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6">
+                        <p><strong>Order Date:</strong><br>
+                        {{ order.created_at.strftime('%Y-%m-%d %H:%M') }}</p>
+                        
+                        <p><strong>Shop:</strong><br>
+                        {{ order.shop.name }}</p>
+                        
+                        {% if order.delivery_person %}
+                        <p><strong>Delivery Person:</strong><br>
+                        {{ order.delivery_person.username }}</p>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-6">
+                        <p><strong>Delivery Address:</strong><br>
+                        {{ order.delivery_address }}</p>
+                        
+                        {% if order.status == 'in_delivery' %}
+                        <a href="{{ url_for('user.track_order', order_id=order.id) }}" 
+                           class="btn btn-info">Track Order</a>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Order Items</h5>
+                <div class="table-responsive">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Product</th>
+                                <th>Quantity</th>
+                                <th>Price</th>
+                                <th>Negotiated Price</th>
+                                <th>Subtotal</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in order.items %}
+                            <tr>
+                                <td>{{ item.product.name }}</td>
+                                <td>{{ item.quantity }}</td>
+                                <td>${{ "%.2f"|format(item.price) }}</td>
+                                <td>
+                                    {% if item.negotiated_price %}
+                                    ${{ "%.2f"|format(item.negotiated_price) }}
+                                    <span class="badge bg-success">
+                                        Saved {{ "%.1f"|format((1 - item.negotiated_price/item.price) * 100) }}%
+                                    </span>
+                                    {% else %}
+                                    -
+                                    {% endif %}
+                                </td>
+                                <td>${{ "%.2f"|format(item.subtotal) }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                        <tfoot>
+                            <tr>
+                                <td colspan="4" class="text-end"><strong>Total:</strong></td>
+                                <td><strong>${{ "%.2f"|format(order.total_amount) }}</strong></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Shop Information</h5>
+                <p><strong>{{ order.shop.name }}</strong></p>
+                <p>{{ order.shop.description }}</p>
+                <p><strong>Address:</strong><br>
+                {{ order.shop.address }}</p>
+                <hr>
+                <a href="{{ url_for('shop.index', shop_id=order.shop.id) }}" 
+                   class="btn btn-primary">Visit Shop</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

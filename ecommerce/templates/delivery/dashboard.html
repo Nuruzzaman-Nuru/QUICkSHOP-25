@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+
+{% block title %}Delivery Dashboard{% endblock %}
+
+{% block content %}
+<div class="dashboard-container">
+    <div class="delivery-status">
+        <h1>Delivery Dashboard</h1>
+        <p>Welcome, {{ current_user.username }}</p>
+        {% if current_delivery %}
+            <div class="current-delivery-info">
+                <h3>Current Delivery</h3>
+                <p>Order #{{ current_delivery.id }} - {{ current_delivery.shop.name }}</p>
+                <p>Status: <span class="status-badge status-{{ current_delivery.status }}">{{ current_delivery.status }}</span></p>
+            </div>
+        {% endif %}
+    </div>
+
+    <div class="admin-stats">
+        <div class="dashboard-card">
+            <h3>Completed Today</h3>
+            <p class="stat-number">{{ completed_today }}</p>
+        </div>
+
+        <div class="dashboard-card">
+            <h3>Active Deliveries</h3>
+            <p class="stat-number">{{ active_deliveries_count }}</p>
+        </div>
+
+        <div class="dashboard-card">
+            <h3>Total Earnings</h3>
+            <p class="stat-number">${{ "%.2f"|format(total_earnings) }}</p>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-6">
+            <div class="dashboard-card">
+                <h3>Active Deliveries</h3>
+                <div class="table-responsive">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Order ID</th>
+                                <th>Shop</th>
+                                <th>Status</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for delivery in active_deliveries %}
+                            <tr>
+                                <td>#{{ delivery.id }}</td>
+                                <td>{{ delivery.shop.name }}</td>
+                                <td>
+                                    <span class="status-badge status-{{ delivery.status }}">
+                                        {{ delivery.status }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <a href="{{ url_for('delivery.delivery_details', order_id=delivery.id) }}" 
+                                       class="action-btn action-primary">Manage</a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="dashboard-card">
+                <h3>Available Orders</h3>
+                <div class="table-responsive">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Order ID</th>
+                                <th>Shop</th>
+                                <th>Distance</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for order in available_orders %}
+                            <tr>
+                                <td>#{{ order.id }}</td>
+                                <td>{{ order.shop.name }}</td>
+                                <td>{{ "%.1f"|format(order.distance) }} km</td>
+                                <td>
+                                    <button onclick="acceptDelivery({{ order.id }})"
+                                            class="action-btn action-primary">Accept</button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="dashboard-card">
+        <h3>Delivery History</h3>
+        <div class="table-responsive">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Order ID</th>
+                        <th>Shop</th>
+                        <th>Completed At</th>
+                        <th>Status</th>
+                        <th>Earnings</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for delivery in completed_deliveries %}
+                    <tr>
+                        <td>#{{ delivery.id }}</td>
+                        <td>{{ delivery.shop.name }}</td>
+                        <td>{{ delivery.updated_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                        <td>
+                            <span class="status-badge status-completed">Completed</span>
+                        </td>
+                        <td>${{ "%.2f"|format(delivery.delivery_fee) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function acceptDelivery(orderId) {
+    fetch(`/delivery/accept/${orderId}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success') {
+            location.reload();
+        } else {
+            alert(data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Failed to accept delivery. Please try again.');
+    });
+}
+</script>
+{% endblock %}

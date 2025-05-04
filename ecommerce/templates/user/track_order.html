@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+
+{% block title %}Track Order #{{ order.id }}{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8">
+        <h2>Track Order #{{ order.id }}</h2>
+        <div id="map" style="height: 500px; width: 100%; margin: 20px 0;"></div>
+    </div>
+    <div class="col-md-4">
+        <div class="card mb-4">
+            <div class="card-body">
+                <h5 class="card-title">Order Status</h5>
+                <div class="d-flex justify-content-between align-items-center">
+                    <span class="badge bg-{{ 'info' if order.status == 'in_delivery' else 'success' }} fs-6">
+                        {{ order.status|replace('_', ' ')|title }}
+                    </span>
+                    <small class="text-muted last-updated"></small>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-body">
+                <h5 class="card-title">Delivery Details</h5>
+                {% if order.delivery_person %}
+                    <p><strong>Delivery Person:</strong><br>
+                    {{ order.delivery_person.username }}</p>
+                {% endif %}
+                
+                <p><strong>Pickup Location:</strong><br>
+                {{ order.shop.name }}<br>
+                {{ order.shop.address }}</p>
+                
+                <p><strong>Delivery Address:</strong><br>
+                {{ order.delivery_address }}</p>
+
+                <div class="estimated-time mt-3">
+                    <strong>Estimated Time:</strong><br>
+                    <span class="eta">Calculating...</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Order Summary</h5>
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <tbody>
+                            {% for item in order.items %}
+                            <tr>
+                                <td>{{ item.product.name }} x {{ item.quantity }}</td>
+                                <td class="text-end">${{ "%.2f"|format(item.subtotal) }}</td>
+                            </tr>
+                            {% endfor %}
+                            <tr class="fw-bold">
+                                <td>Total</td>
+                                <td class="text-end">${{ "%.2f"|format(order.total_amount) }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://maps.googleapis.com/maps/api/js?key={{ config.GOOGLE_MAPS_API_KEY }}&callback=initMap" async defer></script>
+<script>
+let map;
+let deliveryMarker;
+let shopMarker;
+let destinationMarker;
+let directionsService;
+let directionsRenderer;
+let lastLocation = null;
+const updateInterval = 10000; // Update every 10 seconds
+
+function initMap() {
+    directionsService = new google.maps.DirectionsService();
+    directionsRenderer = new google.maps.DirectionsRenderer({
+        suppressMarkers: true // We'll handle markers ourselves
+    });
+    
+    // Initialize map centered between shop and delivery address
+    const centerLat = ({{ order.shop.location_lat }} + {{ order.delivery_lat }}) / 2;
+    const centerLng = ({{ order.shop.location_lng }} + {{ order.delivery_lng }}) / 2;
+    
+    map = new google.maps.Map(document.getElementById('map'), {
+        zoom: 13,
+        center: { lat: centerLat, lng: centerLng }
+    });
+    
+    directionsRenderer.setMap(map);
+    
+    // Add shop marker
+    shopMarker = new google.maps.Marker({
+        position: {
+            lat: {{ order.shop.location_lat }},
+            lng: {{ order.shop.location_lng }}
+        },
+        map: map,
+        icon: 'http://maps.google.com/mapfiles/ms/icons/blue-dot.png',
+        title: '{{ order.shop.name }}'
+    });
+    
+    // Add destination marker
+    destinationMarker = new google.maps.Marker({
+        position: {
+            lat: {{ order.delivery_lat }},
+            lng: {{ order.delivery_lng }}
+        },
+        map: map,
+        icon: 'http://maps.google.com/mapfiles/ms/icons/green-dot.png',
+        title: 'Delivery Location'
+    });
+    
+    // Initialize delivery person marker (position will be updated)
+    deliveryMarker = new google.maps.Marker({
+        map: map,
+        icon: 'http://maps.google.com/mapfiles/ms/icons/yellow-dot.png',
+        title: '{{ order.delivery_person.username if order.delivery_person else "Delivery Person" }}'
+    });
+    
+    // Start tracking
+    updateDeliveryLocation();
+    setInterval(updateDeliveryLocation, updateInterval);
+}
+
+function updateDeliveryLocation() {
+    fetch(`/api/delivery/location/{{ order.delivery_person_id }}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                const newLocation = {
+                    lat: data.location.lat,
+                    lng: data.location.lng
+                };
+                
+                // Update marker position
+                deliveryMarker.setPosition(newLocation);
+                
+                // Update route if location has changed
+                if (!lastLocation || 
+                    lastLocation.lat !== newLocation.lat || 
+                    lastLocation.lng !== newLocation.lng) {
+                    updateRoute(newLocation);
+                    lastLocation = newLocation;
+                }
+                
+                // Update last updated time
+                document.querySelector('.last-updated').textContent = 
+                    'Last updated: ' + new Date().toLocaleTimeString();
+            }
+        })
+        .catch(error => console.error('Error updating delivery location:', error));
+}
+
+function updateRoute(currentLocation) {
+    // Calculate route from current location to delivery address
+    const request = {
+        origin: currentLocation,
+        destination: {
+            lat: {{ order.delivery_lat }},
+            lng: {{ order.delivery_lng }}
+        },
+        travelMode: 'DRIVING'
+    };
+    
+    directionsService.route(request, (result, status) => {
+        if (status === 'OK') {
+            directionsRenderer.setDirections(result);
+            
+            // Update ETA
+            const route = result.routes[0];
+            if (route.legs.length) {
+                const duration = route.legs[0].duration.text;
+                document.querySelector('.eta').textContent = duration;
+            }
+        }
+    });
+}
+</script>
+{% endblock %}

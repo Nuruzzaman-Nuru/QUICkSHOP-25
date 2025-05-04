@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: #f8f9fa; padding: 20px; text-align: center; }
+        .content { padding: 20px; }
+        .map { width: 100%; height: 200px; margin: 20px 0; }
+        .details { background: #f8f9fa; padding: 15px; border-radius: 4px; margin: 15px 0; }
+        .footer { text-align: center; padding: 20px; font-size: 0.9em; color: #6c757d; }
+        .button { display: inline-block; padding: 10px 20px; background: #28a745; color: white; text-decoration: none; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h2>New Delivery Assignment</h2>
+        </div>
+        
+        <div class="content">
+            <p>Hello {{ delivery_person.username }},</p>
+            
+            <p>You have been assigned a new delivery:</p>
+            
+            <div class="details">
+                <p><strong>Order #:</strong> {{ order.id }}</p>
+                <p><strong>Shop:</strong> {{ order.shop.name }}</p>
+                <p><strong>Shop Address:</strong> {{ order.shop.address }}</p>
+                <p><strong>Delivery Address:</strong> {{ order.delivery_address }}</p>
+                {% if order.estimated_delivery_time %}
+                    <p><strong>Estimated Delivery Time:</strong> {{ order.estimated_delivery_time.strftime('%I:%M %p') }}</p>
+                {% endif %}
+                <p><strong>Items:</strong></p>
+                <ul>
+                    {% for item in order.items %}
+                        <li>{{ item.quantity }}x {{ item.product.name }}</li>
+                    {% endfor %}
+                </ul>
+                {% if order.special_instructions %}
+                    <p><strong>Special Instructions:</strong> {{ order.special_instructions }}</p>
+                {% endif %}
+            </div>
+            
+            <div class="map">
+                <!-- Static map image with route -->
+                <img src="https://maps.googleapis.com/maps/api/staticmap?size=600x300&markers=color:red|label:S|{{ order.shop.location_lat }},{{ order.shop.location_lng }}&markers=color:green|label:D|{{ order.delivery_lat }},{{ order.delivery_lng }}&path=color:0x0000ff|weight:5|{{ order.shop.location_lat }},{{ order.shop.location_lng }}|{{ order.delivery_lat }},{{ order.delivery_lng }}&key={{ config.GOOGLE_MAPS_API_KEY }}" 
+                     alt="Delivery Route Map"
+                     style="max-width: 100%; height: auto;">
+            </div>
+            
+            <p>
+                <a href="{{ url_for('delivery.delivery_details', order_id=order.id, _external=True) }}" class="button">
+                    View Delivery Details
+                </a>
+            </p>
+            
+            <p>Please update the order status as you proceed with the delivery.</p>
+        </div>
+        
+        <div class="footer">
+            <p>Thank you for your service!</p>
+            <p>For any issues, please contact the support team immediately.</p>
+        </div>
+    </div>
+</body>
+</html>

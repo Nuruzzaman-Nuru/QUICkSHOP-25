@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+
+{% block title %}Nearby Shops{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8">
+        <h2>Shops Near You</h2>
+        <div id="map" style="height: 400px; width: 100%; margin: 20px 0;"></div>
+    </div>
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Your Location</h5>
+                <p><strong>Address:</strong><br>
+                {{ current_user.address or 'Not set' }}</p>
+                {% if not current_user.location_lat %}
+                <div class="alert alert-warning">
+                    Please update your location in your profile to see nearby shops.
+                </div>
+                <a href="{{ url_for('auth.profile') }}" class="btn btn-primary">Update Location</a>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="mt-4">
+            <h5>Available Shops</h5>
+            <div class="list-group">
+                {% for shop in shops %}
+                <a href="{{ url_for('shop.index', shop_id=shop.id) }}" 
+                   class="list-group-item list-group-item-action shop-item"
+                   data-lat="{{ shop.location_lat }}"
+                   data-lng="{{ shop.location_lng }}">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h6 class="mb-1">{{ shop.name }}</h6>
+                        <small class="distance-text"></small>
+                    </div>
+                    <p class="mb-1">{{ shop.description[:100] }}{% if shop.description|length > 100 %}...{% endif %}</p>
+                    <small>{{ shop.address }}</small>
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://maps.googleapis.com/maps/api/js?key={{ config.GOOGLE_MAPS_API_KEY }}&callback=initMap" async defer></script>
+<script>
+let map;
+let userMarker;
+let shopMarkers = [];
+let bounds;
+
+function initMap() {
+    bounds = new google.maps.LatLngBounds();
+    
+    // Initialize map centered on user's location
+    map = new google.maps.Map(document.getElementById('map'), {
+        zoom: 13,
+        center: {
+            lat: {{ current_user.location_lat or 0 }},
+            lng: {{ current_user.location_lng or 0 }}
+        }
+    });
+
+    // Add user marker if location is set
+    {% if current_user.location_lat %}
+        userMarker = new google.maps.Marker({
+            position: {
+                lat: {{ current_user.location_lat }},
+                lng: {{ current_user.location_lng }}
+            },
+            map: map,
+            icon: 'http://maps.google.com/mapfiles/ms/icons/blue-dot.png',
+            title: 'Your Location'
+        });
+        bounds.extend(userMarker.getPosition());
+    {% endif %}
+
+    // Add shop markers
+    {% for shop in shops %}
+        const shopMarker = new google.maps.Marker({
+            position: {
+                lat: {{ shop.location_lat }},
+                lng: {{ shop.location_lng }}
+            },
+            map: map,
+            icon: 'http://maps.google.com/mapfiles/ms/icons/red-dot.png',
+            title: '{{ shop.name }}'
+        });
+        
+        const infoWindow = new google.maps.InfoWindow({
+            content: `
+                <div>
+                    <h6>{{ shop.name }}</h6>
+                    <p>{{ shop.address }}</p>
+                    <a href="{{ url_for('shop.index', shop_id=shop.id) }}" class="btn btn-sm btn-primary">Visit Shop</a>
+                </div>
+            `
+        });
+
+        shopMarker.addListener('click', () => {
+            infoWindow.open(map, shopMarker);
+        });
+
+        shopMarkers.push(shopMarker);
+        bounds.extend(shopMarker.getPosition());
+    {% endfor %}
+
+    // Fit map to show all markers
+    map.fitBounds(bounds);
+
+    // Calculate distances if user location is set
+    {% if current_user.location_lat %}
+        calculateDistances();
+    {% endif %}
+}
+
+function calculateDistances() {
+    const userLocation = {
+        lat: {{ current_user.location_lat or 0 }},
+        lng: {{ current_user.location_lng or 0 }}
+    };
+
+    document.querySelectorAll('.shop-item').forEach(item => {
+        const shopLat = parseFloat(item.dataset.lat);
+        const shopLng = parseFloat(item.dataset.lng);
+        const distance = getDistance(
+            userLocation.lat, userLocation.lng,
+            shopLat, shopLng
+        );
+        
+        item.querySelector('.distance-text').textContent = 
+            `${distance.toFixed(1)} km away`;
+    });
+}
+
+function getDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371; // Earth's radius in km
+    const dLat = deg2rad(lat2 - lat1);
+    const dLon = deg2rad(lon2 - lon1);
+    const a = 
+        Math.sin(dLat/2) * Math.sin(dLat/2) +
+        Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * 
+        Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+}
+
+function deg2rad(deg) {
+    return deg * (Math.PI/180);
+}
+</script>
+{% endblock %}

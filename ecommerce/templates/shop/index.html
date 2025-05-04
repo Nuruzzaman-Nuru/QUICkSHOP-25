@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}Shops{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2 class="mb-4">Available Shops</h2>
+    
+    <div class="row">
+        {% for shop in shops %}
+            <div class="col-md-4 mb-4">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <h5 class="card-title">{{ shop.name }}</h5>
+                        <p class="card-text">{{ shop.description }}</p>
+                        <p class="card-text">
+                            <small class="text-muted">
+                                <i class="bi bi-geo-alt"></i> {{ shop.address }}
+                            </small>
+                        </p>
+                    </div>
+                    <div class="card-footer bg-transparent border-top-0">
+                        <a href="{{ url_for('shop.view', shop_id=shop.id) }}" class="btn btn-primary">
+                            View Shop
+                        </a>
+                    </div>
+                </div>
+            </div>
+        {% else %}
+            <div class="col-12 text-center">
+                <div class="alert alert-info">
+                    No shops available at the moment.
+                </div>
+            </div>
+        {% endfor %}
+    </div>
+    
+    {% if current_user.is_authenticated and current_user.is_shop_owner and not current_user.shop %}
+        <div class="text-center mt-4">
+            <a href="{{ url_for('shop.create') }}" class="btn btn-success">
+                <i class="bi bi-plus-circle"></i> Create Your Shop
+            </a>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

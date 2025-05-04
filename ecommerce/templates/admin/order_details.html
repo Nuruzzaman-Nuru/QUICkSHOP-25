@@ -1,0 +1,122 @@
+<!-- This template is rendered inside a modal -->
+<div class="row">
+    <div class="col-md-6">
+        <h6>Customer Information</h6>
+        <p>
+            <strong>Name:</strong> {{ order.customer.username }}<br>
+            <strong>Email:</strong> {{ order.customer.email }}
+        </p>
+
+        <h6>Delivery Information</h6>
+        <p>
+            <strong>Address:</strong><br>
+            {{ order.delivery_address }}
+        </p>
+        
+        {% if order.delivery_person %}
+        <p>
+            <strong>Delivery Person:</strong><br>
+            {{ order.delivery_person.username }}<br>
+            <small class="text-muted">Last updated: {{ order.delivery_person.updated_at.strftime('%Y-%m-%d %H:%M') }}</small>
+        </p>
+        {% endif %}
+    </div>
+    
+    <div class="col-md-6">
+        <h6>Shop Information</h6>
+        <p>
+            <strong>Shop:</strong> {{ order.shop.name }}<br>
+            <strong>Address:</strong> {{ order.shop.address }}
+        </p>
+
+        <h6>Order Status</h6>
+        <p>
+            <span class="badge bg-{{ 'primary' if order.status == 'pending' 
+                                else 'info' if order.status == 'in_delivery' 
+                                else 'success' if order.status == 'delivered'
+                                else 'secondary' }}">
+                {{ order.status|replace('_', ' ')|title }}
+            </span>
+        </p>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-12">
+        <h6>Order Items</h6>
+        <div class="table-responsive">
+            <table class="table table-sm">
+                <thead>
+                    <tr>
+                        <th>Product</th>
+                        <th>Quantity</th>
+                        <th>Price</th>
+                        <th>Negotiated Price</th>
+                        <th class="text-end">Subtotal</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in order.items %}
+                    <tr>
+                        <td>{{ item.product.name }}</td>
+                        <td>{{ item.quantity }}</td>
+                        <td>${{ "%.2f"|format(item.price) }}</td>
+                        <td>
+                            {% if item.negotiated_price %}
+                                ${{ "%.2f"|format(item.negotiated_price) }}
+                                <span class="badge bg-success">
+                                    -{{ "%.1f"|format((1 - item.negotiated_price/item.price) * 100) }}%
+                                </span>
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                        <td class="text-end">${{ "%.2f"|format(item.subtotal) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td colspan="4" class="text-end"><strong>Total:</strong></td>
+                        <td class="text-end"><strong>${{ "%.2f"|format(order.total_amount) }}</strong></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-12">
+        <h6>Timeline</h6>
+        <div class="list-group">
+            <div class="list-group-item">
+                <div class="d-flex w-100 justify-content-between">
+                    <h6 class="mb-1">Order Created</h6>
+                    <small>{{ order.created_at.strftime('%Y-%m-%d %H:%M') }}</small>
+                </div>
+                <p class="mb-1">Order #{{ order.id }} was created by {{ order.customer.username }}</p>
+            </div>
+            
+            {% if order.delivery_person %}
+            <div class="list-group-item">
+                <div class="d-flex w-100 justify-content-between">
+                    <h6 class="mb-1">Delivery Assigned</h6>
+                    <small>{{ order.updated_at.strftime('%Y-%m-%d %H:%M') }}</small>
+                </div>
+                <p class="mb-1">Assigned to delivery person: {{ order.delivery_person.username }}</p>
+            </div>
+            {% endif %}
+            
+            {% if order.status == 'delivered' %}
+            <div class="list-group-item">
+                <div class="d-flex w-100 justify-content-between">
+                    <h6 class="mb-1">Order Delivered</h6>
+                    <small>{{ order.updated_at.strftime('%Y-%m-%d %H:%M') }}</small>
+                </div>
+                <p class="mb-1">Order was successfully delivered</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
