@@ -8,6 +8,7 @@ class Order(db.Model):
     delivery_person_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     status = db.Column(db.String(20), nullable=False, default='pending')
     total_amount = db.Column(db.Float, nullable=False, default=0.0)
+    delivery_fee = db.Column(db.Float, nullable=False, default=5.0)  # Default delivery fee
     delivery_address = db.Column(db.String(200), nullable=False)
     delivery_lat = db.Column(db.Float)
     delivery_lng = db.Column(db.Float)
