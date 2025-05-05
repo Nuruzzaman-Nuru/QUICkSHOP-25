@@ -136,27 +136,32 @@ def orders():
         return redirect(url_for('shop.create'))
     
     # Get search and filter parameters
-    search_query = request.args.get('q', '')
-    status = request.args.get('status')
+    search_query = request.args.get('q', '').strip()
+    status = request.args.get('status', '').strip()
     sort = request.args.get('sort', 'newest')
     page = request.args.get('page', 1, type=int)
-    per_page = 20
+    per_page = 10  # Number of orders per page
     
     # Base query
     query = Order.query.filter_by(shop_id=shop.id)
     
     # Apply search filter
     if search_query:
-        query = query.join(Order.customer).filter(
-            or_(
-                Order.id.cast(String).ilike(f'%{search_query}%'),
-                User.username.ilike(f'%{search_query}%')
+        # Search by order ID or customer username
+        try:
+            order_id = int(search_query)
+            query = query.filter(Order.id == order_id)
+        except ValueError:
+            query = query.join(Order.customer).filter(
+                or_(
+                    User.username.ilike(f'%{search_query}%'),
+                    User.email.ilike(f'%{search_query}%')
+                )
             )
-        )
     
     # Apply status filter
     if status:
-        query = query.filter(Order.status == status)  # Changed from filter_by to filter with Order.status
+        query = query.filter(Order.status == status)
     
     # Apply sorting
     if sort == 'oldest':
@@ -168,13 +173,27 @@ def orders():
     else:  # newest
         query = query.order_by(Order.created_at.desc())
     
-    # Paginate results
-    pagination = query.paginate(page=page, per_page=per_page)
+    # Execute query with pagination
+    pagination = query.paginate(page=page, per_page=per_page, error_out=False)
     orders = pagination.items
+    
+    # Get counts for different statuses for the status filter badges
+    status_counts = {
+        'all': query.count(),
+        'pending': query.filter(Order.status == 'pending').count(),
+        'confirmed': query.filter(Order.status == 'confirmed').count(),
+        'delivering': query.filter(Order.status == 'delivering').count(),
+        'completed': query.filter(Order.status == 'completed').count(),
+        'cancelled': query.filter(Order.status == 'cancelled').count()
+    }
     
     return render_template('shop/orders.html', 
                          orders=orders,
-                         pagination=pagination)
+                         pagination=pagination,
+                         status_counts=status_counts,
+                         current_status=status,
+                         current_sort=sort,
+                         search_query=search_query)
 
 @shop_bp.route('/order/<int:order_id>/details')
 @login_required
@@ -233,33 +252,38 @@ def update_order_status(order_id):
 @login_required
 @shop_owner_required
 def settings():
-    shop = current_user.shop
-    if not shop:
-        return redirect(url_for('shop.create'))
-        
     if request.method == 'POST':
-        name = request.form.get('name')
-        description = request.form.get('description')
-        address = request.form.get('address')
-        lat = request.form.get('latitude')
-        lng = request.form.get('longitude')
+        username = request.form.get('username')
+        email = request.form.get('email')
+        current_password = request.form.get('current_password')
+        new_password = request.form.get('new_password')
+        confirm_password = request.form.get('confirm_password')
         
-        if not all([name, description, address]):
-            flash('Please fill in all required fields.', 'error')
-            return redirect(url_for('shop.settings'))
+        # Update username and email
+        if username and email:
+            current_user.username = username
+            current_user.email = email
             
+        # Update password if provided
+        if current_password and new_password and confirm_password:
+            if not current_user.check_password(current_password):
+                flash('Current password is incorrect.', 'error')
+                return redirect(url_for('shop.settings'))
+                
+            if new_password != confirm_password:
+                flash('New passwords do not match.', 'error')
+                return redirect(url_for('shop.settings'))
+                
+            current_user.set_password(new_password)
+        
         try:
-            shop.name = name
-            shop.description = description
-            shop.address = address
-            shop.location_lat = float(lat) if lat else None
-            shop.location_lng = float(lng) if lng else None
             db.session.commit()
-            flash('Shop settings updated successfully!', 'success')
-        except ValueError:
-            flash('Invalid coordinates provided.', 'error')
+            flash('Settings updated successfully!', 'success')
+        except Exception as e:
+            db.session.rollback()
+            flash('Error updating settings.', 'error')
             
-    return render_template('shop/settings.html', shop=shop)
+    return render_template('shop/settings.html')
 
 @shop_bp.route('/analytics')
 @login_required

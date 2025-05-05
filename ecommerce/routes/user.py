@@ -117,27 +117,31 @@ def track_order(order_id):
 @login_required
 def negotiations():
     # Get search and filter parameters
-    search_query = request.args.get('q', '')
+    search_query = request.args.get('q', '').strip()
     status = request.args.get('status')
     sort = request.args.get('sort', 'newest')
     page = request.args.get('page', 1, type=int)
     per_page = 10
     
-    # Base query
-    query = Negotiation.query.filter_by(customer_id=current_user.id)
+    # Base query - eager load product and shop to avoid N+1 queries
+    query = Negotiation.query.join(Negotiation.product).join(Product.shop)
+    
+    # Filter by current user
+    query = query.filter(Negotiation.customer_id == current_user.id)
     
     # Apply search filter
     if search_query:
-        query = query.join(Negotiation.product).join(Product.shop).filter(
+        query = query.filter(
             or_(
                 Product.name.ilike(f'%{search_query}%'),
-                Shop.name.ilike(f'%{search_query}%')
+                Shop.name.ilike(f'%{search_query}%'),
+                Product.category.ilike(f'%{search_query}%')
             )
         )
     
     # Apply status filter
     if status:
-        query = query.filter_by(status=status)
+        query = query.filter(Negotiation.status == status)
     
     # Apply sorting
     if sort == 'oldest':

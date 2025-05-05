@@ -182,18 +182,52 @@ def delivery_details(order_id):
 @delivery_required
 def settings():
     if request.method == 'POST':
+        username = request.form.get('username')
+        email = request.form.get('email')
         address = request.form.get('address')
         lat = request.form.get('latitude')
         lng = request.form.get('longitude')
+        current_password = request.form.get('current_password')
+        new_password = request.form.get('new_password')
+        confirm_password = request.form.get('confirm_password')
+
+        # Update basic info
+        if username and email:
+            current_user.username = username
+            current_user.email = email
+        
+        # Update address and coordinates
+        if address:
+            current_user.address = address
+            try:
+                if lat and lng:
+                    current_user.location_lat = float(lat)
+                    current_user.location_lng = float(lng)
+                else:
+                    current_user.location_lat = None
+                    current_user.location_lng = None
+            except ValueError:
+                flash('Invalid coordinates provided.', 'error')
+                return redirect(url_for('delivery.settings'))
+        
+        # Update password if provided
+        if current_password and new_password and confirm_password:
+            if not current_user.check_password(current_password):
+                flash('Current password is incorrect.', 'error')
+                return redirect(url_for('delivery.settings'))
+                
+            if new_password != confirm_password:
+                flash('New passwords do not match.', 'error')
+                return redirect(url_for('delivery.settings'))
+                
+            current_user.set_password(new_password)
         
         try:
-            current_user.address = address
-            current_user.location_lat = float(lat) if lat else None
-            current_user.location_lng = float(lng) if lng else None
             db.session.commit()
             flash('Settings updated successfully!', 'success')
-        except ValueError:
-            flash('Invalid coordinates provided.', 'error')
+        except Exception as e:
+            db.session.rollback()
+            flash('Error updating settings.', 'error')
             
     return render_template('delivery/settings.html')
 

@@ -34,6 +34,7 @@
                             <label for="address" class="form-label">Current Address</label>
                             <input type="text" class="form-control" id="address" name="address" 
                                    value="{{ current_user.address }}" required>
+                            <div id="map" style="height: 300px; width: 100%; margin-top: 10px;"></div>
                         </div>
                         
                         <!-- Hidden fields for coordinates -->
@@ -71,19 +72,64 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="https://maps.googleapis.com/maps/api/js?key={{ config.GOOGLE_MAPS_API_KEY }}&libraries=places"></script>
 <script>
-// Initialize location autocomplete if Google Maps API is available
-if (typeof google !== 'undefined') {
+let map;
+let marker;
+
+function initMap() {
+    // Initialize map
+    const defaultLocation = {
+        lat: {{ current_user.location_lat or 0 }},
+        lng: {{ current_user.location_lng or 0 }}
+    };
+
+    map = new google.maps.Map(document.getElementById('map'), {
+        zoom: 15,
+        center: defaultLocation,
+    });
+
+    // Add marker for current location
+    marker = new google.maps.Marker({
+        position: defaultLocation,
+        map: map,
+        draggable: true
+    });
+
+    // Update coordinates when marker is dragged
+    marker.addListener('dragend', function() {
+        const position = marker.getPosition();
+        document.getElementById('latitude').value = position.lat();
+        document.getElementById('longitude').value = position.lng();
+        
+        // Reverse geocode to update address
+        const geocoder = new google.maps.Geocoder();
+        geocoder.geocode({ location: position }, function(results, status) {
+            if (status === 'OK' && results[0]) {
+                document.getElementById('address').value = results[0].formatted_address;
+            }
+        });
+    });
+
+    // Initialize Places Autocomplete
     const addressInput = document.getElementById('address');
     const autocomplete = new google.maps.places.Autocomplete(addressInput);
     
     autocomplete.addListener('place_changed', function() {
         const place = autocomplete.getPlace();
         if (place.geometry) {
+            // Update map
+            map.setCenter(place.geometry.location);
+            marker.setPosition(place.geometry.location);
+            
+            // Update coordinates
             document.getElementById('latitude').value = place.geometry.location.lat();
             document.getElementById('longitude').value = place.geometry.location.lng();
         }
     });
 }
+
+// Initialize map when page loads
+window.addEventListener('load', initMap);
 </script>
 {% endblock %}
