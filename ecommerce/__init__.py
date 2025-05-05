@@ -6,6 +6,7 @@ from .config import config
 import logging
 from logging.handlers import RotatingFileHandler
 import os
+import json
 
 # Initialize extensions
 db = SQLAlchemy()
@@ -26,6 +27,12 @@ def create_app(config_name='default'):
     # Configure login
     login_manager.login_view = 'auth.login'
     login_manager.login_message_category = 'info'
+    
+    # Add escapejs filter
+    def escapejs(val):
+        return json.dumps(str(val))[1:-1]
+    
+    app.jinja_env.filters['escapejs'] = escapejs
     
     from .models.user import User
     @login_manager.user_loader

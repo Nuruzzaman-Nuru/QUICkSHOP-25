@@ -131,24 +131,39 @@ def update_delivery_status(order_id):
             'message': 'You are not assigned to this delivery'
         }), 403
     
-    new_status = request.form.get('status')
-    if new_status not in ['delivering', 'completed']:
+    data = request.get_json()
+    new_status = data.get('status')
+    
+    try:
+        # Update order status with validation
+        if order.update_status(new_status):
+            # Update location for delivering orders
+            if new_status == 'delivering':
+                current_user.location_lat = data.get('lat')
+                current_user.location_lng = data.get('lng')
+                
+            db.session.commit()
+            
+            # Send notifications
+            notify_customer_order_status(order)
+            notify_admin_order_status(order)
+            
+            return jsonify({
+                'status': 'success',
+                'message': f'Order status updated to {new_status}'
+            })
+            
+    except ValueError as e:
         return jsonify({
             'status': 'error',
-            'message': 'Invalid status'
+            'message': str(e)
         }), 400
-    
-    order.status = new_status
-    if new_status == 'completed':
-        order.updated_at = datetime.now()
-    
-    db.session.commit()
-    
-    # Send notifications
-    notify_customer_order_status(order)
-    notify_admin_order_status(order)
-    
-    return jsonify({'status': 'success'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'status': 'error',
+            'message': 'An error occurred while updating order status'
+        }), 500
 
 @delivery_bp.route('/delivery/<int:order_id>/details')
 @login_required
@@ -181,6 +196,38 @@ def settings():
             flash('Invalid coordinates provided.', 'error')
             
     return render_template('delivery/settings.html')
+
+@delivery_bp.route('/update-location', methods=['POST'])
+@login_required
+@delivery_required
+def update_location():
+    """Update delivery person's current location"""
+    data = request.get_json()
+    lat = data.get('lat')
+    lng = data.get('lng')
+    
+    if not all([lat, lng]):
+        return jsonify({
+            'status': 'error',
+            'message': 'Coordinates are required'
+        }), 400
+    
+    try:
+        current_user.location_lat = float(lat)
+        current_user.location_lng = float(lng)
+        current_user.location_updated_at = datetime.utcnow()
+        db.session.commit()
+        
+        return jsonify({
+            'status': 'success',
+            'message': 'Location updated successfully'
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
 
 def calculate_distance(lat1, lon1, lat2, lon2):
     """Calculate distance between two points in kilometers using Haversine formula"""

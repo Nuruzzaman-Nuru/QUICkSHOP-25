@@ -22,7 +22,7 @@ def send_email(subject, recipients, template, **kwargs):
     Thread(target=send_async_email, args=(app, msg)).start()
 
 def notify_customer_order_status(order):
-    """Notify customer about order status changes"""
+    """Send order status update notification to customer"""
     msg = Message(
         f'Order #{order.id} Status Update',
         recipients=[order.customer.email]
@@ -68,6 +68,18 @@ def notify_delivery_person_new_order(order):
     ).all()
     
     for person in delivery_persons:
+        # Only notify if within reasonable distance
+        if person.location_lat and person.location_lng:
+            distance = calculate_distance(
+                person.location_lat,
+                person.location_lng,
+                order.delivery_lat,
+                order.delivery_lng
+            )
+            # Skip if more than 10km away
+            if distance > 10:
+                continue
+        
         msg = Message(
             'New Delivery Order Available',
             recipients=[person.email]
@@ -92,47 +104,29 @@ def notify_delivery_assignment(order, delivery_person):
     )
     mail.send(msg)
 
-def notify_all_delivery_persons(order):
-    """Notify all available delivery persons about a new order"""
-    delivery_persons = User.query.filter_by(
-        role='delivery',
-        is_active=True
-    ).all()
+def notify_all_delivery_persons(message):
+    """Send a notification message to all delivery persons"""
+    delivery_persons = User.query.filter_by(role='delivery', is_active=True).all()
     
     for person in delivery_persons:
-        # Calculate distance between delivery person and shop
-        from .distance import calculate_distance, estimate_travel_time
-        distance = calculate_distance(
-            person.location_lat,
-            person.location_lng,
-            order.shop.location_lat,
-            order.shop.location_lng
+        msg = Message(
+            'Delivery Service Update',
+            recipients=[person.email]
         )
-        
-        # Only notify if within reasonable distance (e.g., 10km)
-        if distance <= 10:
-            send_email(
-                'New Delivery Order Available',
-                [person.email],
-                'email/new_order_available.html',
-                order=order,
-                delivery_person=person,
-                distance=distance,
-                estimate_travel_time=estimate_travel_time
-            )
+        msg.html = render_template(
+            'email/general_notification.html',
+            message=message,
+            recipient=person
+        )
+        mail.send(msg)
 
 def estimate_delivery_time(order):
-    """
-    Estimate delivery time in minutes based on:
-    - Distance between shop and delivery address
-    - Current traffic conditions (can be enhanced with external API)
-    - Number of active deliveries for the assigned delivery person
-    """
-    if not order.delivery_lat or not order.delivery_lng:
+    """Estimate delivery time in minutes based on distance and conditions"""
+    if not (order.delivery_lat and order.delivery_lng and 
+            order.shop.location_lat and order.shop.location_lng):
         return 60  # Default 1 hour if no coordinates
         
-    # Calculate base time using distance
-    from .distance import calculate_distance
+    # Calculate distance-based time
     distance = calculate_distance(
         order.shop.location_lat,
         order.shop.location_lng,
@@ -140,18 +134,18 @@ def estimate_delivery_time(order):
         order.delivery_lng
     )
     
-    # Base estimation: 3 minutes per kilometer plus 15 minutes fixed time
-    base_time = (distance * 3) + 15
-    
-    # Add extra time for peak hours (between 11:00-14:00 and 18:00-21:00)
-    current_hour = datetime.now().hour
-    if (11 <= current_hour <= 14) or (18 <= current_hour <= 21):
-        base_time *= 1.3
+    # Base time calculation:
+    # - 15 min base processing time
+    # - 3 min per km distance
+    # - Add 20% buffer for traffic/delays
+    base_time = 15 + (distance * 3)
+    base_time *= 1.2
     
     # Add time for multiple active deliveries
     if order.delivery_person:
-        active_deliveries = order.delivery_person.delivery_orders.filter(
-            status='delivering'
+        active_deliveries = Order.query.filter(
+            Order.delivery_person_id == order.delivery_person_id,
+            Order.status == 'delivering'
         ).count()
         if active_deliveries > 0:
             base_time += (active_deliveries * 10)  # Add 10 minutes per active delivery

@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify
+from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify, session
 from flask_login import login_required, current_user
 from sqlalchemy import func, or_, and_, desc, asc, cast, String, case
 from ..models.order import Order, OrderItem
@@ -18,59 +18,34 @@ user_bp = Blueprint('user', __name__, url_prefix='/user')
 @login_required
 @customer_required
 def dashboard():
-    # Get active orders
+    # Get active orders - orders that are not completed or cancelled
     active_orders = Order.query.filter(
         Order.customer_id == current_user.id,
         Order.status.in_(['pending', 'confirmed', 'delivering'])
-    ).all()
-    active_orders_count = len(active_orders)
+    ).order_by(Order.created_at.desc()).all()
     
-    # Get cart items count
-    cart_items_count = db.session.query(func.count(CartItem.id))\
-        .filter_by(user_id=current_user.id)\
-        .scalar() or 0
+    # Get cart items count from session
+    cart = session.get('cart', {})
+    cart_items_count = sum(item['quantity'] for item in cart.values())
     
     # Get pending negotiations
     pending_negotiations = Negotiation.query.filter(
         Negotiation.customer_id == current_user.id,
         Negotiation.status.in_(['pending', 'counter_offer'])
     ).all()
-    pending_negotiations_count = len(pending_negotiations)
     
-    # Get recent orders
+    # Get recent orders for display
     recent_orders = Order.query.filter_by(customer_id=current_user.id)\
         .order_by(Order.created_at.desc())\
         .limit(5).all()
     
-    # Get active negotiations
-    active_negotiations = Negotiation.query.filter(
-        Negotiation.customer_id == current_user.id,
-        Negotiation.status != 'completed'
-    ).all()
-    
-    # Get nearby shops if user has location
-    nearby_shops = []
-    if current_user.location_lat and current_user.location_lng:
-        shops = Shop.query.filter_by(is_active=True).all()
-        for shop in shops:
-            if shop.location_lat and shop.location_lng:
-                shop.distance = calculate_distance(
-                    current_user.location_lat,
-                    current_user.location_lng,
-                    shop.location_lat,
-                    shop.location_lng
-                )
-                if shop.distance <= 10:  # Only show shops within 10km
-                    nearby_shops.append(shop)
-        nearby_shops.sort(key=lambda x: x.distance)
-    
     return render_template('user/dashboard.html',
-                         active_orders_count=active_orders_count,
+                         active_orders=active_orders,
+                         active_orders_count=len(active_orders),
                          cart_items_count=cart_items_count,
-                         pending_negotiations_count=pending_negotiations_count,
-                         recent_orders=recent_orders,
-                         active_negotiations=active_negotiations,
-                         nearby_shops=nearby_shops[:6])  # Limit to 6 shops
+                         pending_negotiations=pending_negotiations,
+                         pending_negotiations_count=len(pending_negotiations),
+                         recent_orders=recent_orders)
 
 @user_bp.route('/orders')
 @login_required

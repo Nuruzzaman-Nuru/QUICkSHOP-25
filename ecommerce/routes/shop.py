@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify, current_app
 from flask_login import login_required, current_user
-from sqlalchemy import func, or_, desc, asc
+from sqlalchemy import func, or_, desc, asc, String
 from functools import wraps
 from werkzeug.utils import secure_filename
 import os
@@ -156,7 +156,7 @@ def orders():
     
     # Apply status filter
     if status:
-        query = query.filter_by(status=status)
+        query = query.filter(Order.status == status)  # Changed from filter_by to filter with Order.status
     
     # Apply sorting
     if sort == 'oldest':
@@ -185,6 +185,49 @@ def order_details(order_id):
         flash('Access denied.', 'error')
         return redirect(url_for('shop.orders'))
     return render_template('shop/order_details.html', order=order)
+
+@shop_bp.route('/order/<int:order_id>/update-status', methods=['POST'])
+@login_required
+@shop_owner_required
+def update_order_status(order_id):
+    order = Order.query.get_or_404(order_id)
+    
+    # Verify shop owner owns this order
+    if order.shop_id != current_user.shop.id:
+        return jsonify({
+            'status': 'error',
+            'message': 'Access denied. This order belongs to another shop.'
+        }), 403
+    
+    data = request.get_json()
+    new_status = data.get('status')
+    
+    try:
+        if order.update_status(new_status):
+            db.session.commit()
+            # Send notifications
+            notify_customer_order_status(order)
+            notify_admin_order_status(order)
+            
+            if new_status == 'confirmed':
+                # Notify available delivery personnel
+                notify_delivery_person_new_order(order)
+            
+            return jsonify({
+                'status': 'success',
+                'message': f'Order status updated to {new_status}'
+            })
+    except ValueError as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'status': 'error',
+            'message': 'An error occurred while updating order status'
+        }), 500
 
 @shop_bp.route('/settings', methods=['GET', 'POST'])
 @login_required

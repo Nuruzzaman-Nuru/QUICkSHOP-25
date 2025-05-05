@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from .. import db
 
 class Order(db.Model):
@@ -33,18 +33,27 @@ class Order(db.Model):
         self.updated_at = datetime.utcnow()
 
     def update_status(self, new_status):
-        valid_statuses = ['pending', 'confirmed', 'ready', 'assigned', 'in_delivery', 'delivered', 'cancelled']
-        if new_status not in valid_statuses:
-            raise ValueError(f'Invalid status: {new_status}')
+        """Update order status with proper validation and side effects"""
+        valid_transitions = {
+            'pending': ['confirmed', 'cancelled'],
+            'confirmed': ['delivering', 'cancelled'],
+            'delivering': ['completed', 'cancelled'],
+            'completed': [],  # Final state
+            'cancelled': []   # Final state
+        }
+        
+        if new_status not in valid_transitions.get(self.status, []):
+            raise ValueError(f'Invalid status transition from {self.status} to {new_status}')
         
         self.status = new_status
         self.updated_at = datetime.utcnow()
         
-        if new_status == 'in_delivery':
-            # Set estimated delivery time when delivery starts
+        if new_status == 'delivering':
             from ..utils.notifications import estimate_delivery_time
             minutes = estimate_delivery_time(self)
-            self.estimated_delivery_time = datetime.utcnow().timestamp() + (minutes * 60)
+            self.estimated_delivery_time = datetime.utcnow() + timedelta(minutes=minutes)
+        
+        return True
 
     def calculate_total(self):
         self.total_amount = sum(item.subtotal for item in self.items)

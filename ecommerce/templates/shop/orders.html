@@ -53,10 +53,10 @@
                             <tr>
                                 <th>Order ID</th>
                                 <th>Customer</th>
-                                <th>Total Amount</th>
+                                <th>Amount</th>
                                 <th>Items</th>
                                 <th>Status</th>
-                                <th>Date</th>
+                                <th>Created At</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
@@ -81,16 +81,24 @@
                                     <td>{{ order.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
                                     <td>
                                         <div class="btn-group">
-                                            <a href="{{ url_for('shop.order_details', order_id=order.id) }}" 
-                                               class="btn btn-sm btn-outline-primary">
+                                            <button type="button" class="btn btn-sm btn-outline-primary view-details" 
+                                                    data-bs-toggle="modal" 
+                                                    data-bs-target="#orderDetailsModal"
+                                                    data-order-id="{{ order.id }}">
                                                 <i class="bi bi-eye"></i>
-                                            </a>
+                                            </button>
                                             {% if order.status == 'pending' %}
                                                 <button class="btn btn-sm btn-outline-success update-status" 
                                                         data-order-id="{{ order.id }}"
                                                         data-status="confirmed">
                                                     <i class="bi bi-check-circle"></i>
                                                 </button>
+                                            {% endif %}
+                                            {% if order.status == 'delivering' %}
+                                                <a href="{{ url_for('user.track_order', order_id=order.id) }}"
+                                                   class="btn btn-sm btn-outline-info" target="_blank">
+                                                    <i class="bi bi-geo-alt"></i>
+                                                </a>
                                             {% endif %}
                                         </div>
                                     </td>
@@ -123,6 +131,21 @@
     </div>
 </div>
 
+<!-- Order Details Modal -->
+<div class="modal fade" id="orderDetailsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Order Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="orderDetailsContent">
+                Loading...
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Update Status Modal -->
 <div class="modal fade" id="updateStatusModal" tabindex="-1">
     <div class="modal-dialog">
@@ -132,11 +155,17 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <p>Are you sure you want to confirm this order?</p>
+                <p>Are you sure you want to confirm this order? This will make it available for delivery.</p>
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle"></i>
+                    Once confirmed, delivery personnel in the area will be notified and can pick up the order.
+                </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-success" id="confirmStatusUpdate">Confirm</button>
+                <button type="button" class="btn btn-success" id="confirmStatusUpdate">
+                    <i class="bi bi-check-circle"></i> Confirm Order
+                </button>
             </div>
         </div>
     </div>
@@ -161,6 +190,10 @@ document.addEventListener('DOMContentLoaded', function() {
     // Handle status update confirmation
     document.getElementById('confirmStatusUpdate').addEventListener('click', function() {
         if (!orderToUpdate || !newStatus) return;
+        
+        const button = this;
+        button.disabled = true;
+        button.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Processing...';
 
         fetch(`/shop/order/${orderToUpdate}/update-status`, {
             method: 'POST',
@@ -174,12 +207,44 @@ document.addEventListener('DOMContentLoaded', function() {
             if (data.status === 'success') {
                 location.reload();
             } else {
-                alert(data.message);
+                alert(data.message || 'Error updating order status');
+                button.disabled = false;
+                button.innerHTML = '<i class="bi bi-check-circle"></i> Confirm Order';
             }
         })
         .catch(error => {
             console.error('Error:', error);
             alert('Error updating order status');
+            button.disabled = false;
+            button.innerHTML = '<i class="bi bi-check-circle"></i> Confirm Order';
+        });
+    });
+
+    // Handle view details clicks
+    document.querySelectorAll('.view-details').forEach(button => {
+        button.addEventListener('click', function() {
+            const orderId = this.dataset.orderId;
+            
+            // Show loading state
+            document.getElementById('orderDetailsContent').innerHTML = `
+                <div class="text-center">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+            `;
+            
+            // Fetch order details
+            fetch(`/shop/order/${orderId}/details`)
+                .then(response => response.text())
+                .then(html => {
+                    document.getElementById('orderDetailsContent').innerHTML = html;
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    document.getElementById('orderDetailsContent').innerHTML = 
+                        '<div class="alert alert-danger">Error loading order details</div>';
+                });
         });
     });
 

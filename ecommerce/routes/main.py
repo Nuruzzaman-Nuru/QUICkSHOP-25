@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, session, send_from_directory, request, redirect, url_for, jsonify
+from flask import Blueprint, render_template, session, send_from_directory, request, redirect, url_for, jsonify, current_app
 from flask_login import login_required
 from sqlalchemy import or_, func, and_
 from ..models.shop import Shop, Product
@@ -66,17 +66,46 @@ def search():
     min_price = request.args.get('min_price', type=float)
     max_price = request.args.get('max_price', type=float)
     sort = request.args.get('sort', 'relevance')
-    
+    page = request.args.get('page', 1, type=int)
+    per_page = 12  # Number of items per page
+
+    # Location-based search parameters
+    lat = request.args.get('lat', type=float)
+    lng = request.args.get('lng', type=float)
+    distance = request.args.get('distance', 10, type=float)  # Default 10km radius
+
     # Initialize queries
     product_query = Product.query.filter(Product.shop.has(Shop.is_active == True))
     shop_query = Shop.query.filter_by(is_active=True)
-    
+
+    # Apply location filter if coordinates are provided
+    if lat is not None and lng is not None:
+        # Haversine formula for distance calculation in kilometers
+        distance_formula = (
+            6371 * func.acos(
+                func.sin(func.radians(lat)) * 
+                func.sin(func.radians(Shop.location_lat)) +
+                func.cos(func.radians(lat)) * 
+                func.cos(func.radians(Shop.location_lat)) * 
+                func.cos(func.radians(Shop.location_lng) - func.radians(lng))
+            )
+        )
+        
+        shop_query = shop_query.add_columns(
+            distance_formula.label('distance')
+        ).having(distance_formula <= distance)
+        
+        if search_type in ['all', 'products']:
+            product_query = product_query.join(Shop).add_columns(
+                distance_formula.label('distance')
+            ).having(distance_formula <= distance)
+
     # Apply shop filter if specified
     if shop_id:
         shop = Shop.query.get_or_404(shop_id)
         product_query = product_query.filter(Product.shop_id == shop_id)
-        search_type = 'products'  # Force products-only search for shop-specific searches
-    
+        search_type = 'products'
+
     # Apply text search filters
     if query:
         if search_type in ['all', 'products']:
@@ -96,7 +125,7 @@ def search():
                     Shop.address.ilike(f'%{query}%')
                 )
             )
-    
+
     # Apply product filters
     if search_type != 'shops':
         if category:
@@ -116,20 +145,21 @@ def search():
             product_query = product_query.order_by(Product.created_at.desc())
         else:  # relevance
             if query:
-                # Custom relevance scoring based on where the match occurs
-                product_query = product_query.order_by(
-                    func.case(
-                        (Product.name.ilike(f'%{query}%'), 0),  # Highest priority
-                        (Product.category.ilike(f'%{query}%'), 1),
-                        (Product.description.ilike(f'%{query}%'), 2),
-                        else_=3
-                    )
-                )
-    
-    # Execute queries based on search type
-    products = product_query.all() if search_type != 'shops' else []
-    shops = shop_query.all() if search_type != 'products' and not shop_id else []
-    
+                from sqlalchemy import text
+                product_query = product_query.order_by(text("(CASE "
+                    "WHEN name LIKE :query THEN 3 "
+                    "WHEN category LIKE :query THEN 2 "
+                    "WHEN description LIKE :query THEN 1 "
+                    "ELSE 0 END) DESC").bindparams(query=f"%{query}%"))
+
+    # Sort shops by distance if location provided
+    if lat is not None and lng is not None:
+        shop_query = shop_query.order_by('distance')
+
+    # Execute queries with pagination
+    products_pagination = product_query.paginate(page=page, per_page=per_page) if search_type != 'shops' else None
+    shops_pagination = shop_query.paginate(page=page, per_page=per_page) if search_type != 'products' and not shop_id else None
+
     # Get unique categories for filter options
     categories = db.session.query(Product.category)\
                          .distinct()\
@@ -137,10 +167,12 @@ def search():
                          .order_by(Product.category)\
                          .all()
     categories = [cat[0] for cat in categories]
-    
+
     return render_template('main/search_results.html',
-                         products=products,
-                         shops=shops,
+                         products=products_pagination.items if products_pagination else [],
+                         shops=shops_pagination.items if shops_pagination else [],
+                         products_pagination=products_pagination,
+                         shops_pagination=shops_pagination,
                          query=query,
                          search_type=search_type,
                          current_category=category,
@@ -148,7 +180,11 @@ def search():
                          min_price=min_price,
                          max_price=max_price,
                          current_sort=sort,
-                         shop=Shop.query.get(shop_id) if shop_id else None)
+                         shop=Shop.query.get(shop_id) if shop_id else None,
+                         search_lat=lat,
+                         search_lng=lng,
+                         search_distance=distance,
+                         config={'GOOGLE_MAPS_API_KEY': current_app.config['GOOGLE_MAPS_API_KEY']})
 
 @main_bp.route('/contact', methods=['GET'])
 def contact_page():

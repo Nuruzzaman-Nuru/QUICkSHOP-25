@@ -26,20 +26,37 @@ def init_cart():
 
 @api_bp.route('/delivery/location/<int:delivery_person_id>')
 def get_delivery_location(delivery_person_id):
+    """Get the current location of a delivery person"""
     delivery_person = User.query.get_or_404(delivery_person_id)
+    
     if not delivery_person.is_delivery_person:
         return jsonify({
             'status': 'error',
             'message': 'Invalid delivery person ID'
-        }), 400
+        }), 404
+    
+    # Get the active delivery for this person
+    active_delivery = Order.query.filter_by(
+        delivery_person_id=delivery_person_id,
+        status='delivering'
+    ).first()
+    
+    if not active_delivery:
+        return jsonify({
+            'status': 'error',
+            'message': 'No active delivery found'
+        }), 404
+    
+    # Get the latest location
+    location = {
+        'lat': delivery_person.location_lat,
+        'lng': delivery_person.location_lng,
+        'last_updated': delivery_person.location_updated_at.isoformat() if delivery_person.location_updated_at else None
+    }
     
     return jsonify({
         'status': 'success',
-        'location': {
-            'lat': delivery_person.location_lat,
-            'lng': delivery_person.location_lng,
-            'last_updated': delivery_person.updated_at.isoformat()
-        }
+        'location': location
     })
 
 @api_bp.route('/admin/delivery-status')
@@ -107,7 +124,7 @@ def dashboard_stats():
 @customer_required
 def add_to_cart():
     try:
-        init_cart()
+        cart = init_cart()
         data = request.get_json()
         
         if not data:
@@ -131,7 +148,7 @@ def add_to_cart():
             }), 400
         
         # Get current quantity in cart
-        current_quantity = session['cart'].get(product_id, {}).get('quantity', 0)
+        current_quantity = cart.get(product_id, {}).get('quantity', 0)
         total_quantity = current_quantity + quantity
         
         # Check if total requested quantity is available
@@ -140,20 +157,22 @@ def add_to_cart():
                 'status': 'error',
                 'message': f'Only {product.stock} items available'
             }), 400
-        
+            
         # Update or add cart item
-        session['cart'][product_id] = {
+        cart[product_id] = {
             'quantity': total_quantity,
             'price': negotiated_price if negotiated_price else float(product.price),
             'name': product.name
         }
-        
         session.modified = True
+        
+        # Get updated cart count for UI update
+        total_count = sum(item['quantity'] for item in cart.values())
         
         return jsonify({
             'status': 'success',
             'message': 'Product added to cart',
-            'cart_count': sum(item['quantity'] for item in session['cart'].values())
+            'cart_count': total_count
         })
         
     except ValueError as e:
@@ -326,6 +345,7 @@ def checkout():
 @login_required
 @customer_required
 def get_cart_count():
+    """Get the total number of items in cart (sum of quantities)"""
     cart = init_cart()
     count = sum(item['quantity'] for item in cart.values())
     return jsonify({

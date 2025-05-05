@@ -3,69 +3,244 @@
 {% block title %}Track Order #{{ order.id }}{% endblock %}
 
 {% block content %}
-<div class="row">
-    <div class="col-md-8">
-        <h2>Track Order #{{ order.id }}</h2>
-        <div id="map" style="height: 500px; width: 100%; margin: 20px 0;"></div>
-    </div>
-    <div class="col-md-4">
-        <div class="card mb-4">
-            <div class="card-body">
-                <h5 class="card-title">Order Status</h5>
-                <div class="d-flex justify-content-between align-items-center">
-                    <span class="badge bg-{{ 'info' if order.status == 'in_delivery' else 'success' }} fs-6">
-                        {{ order.status|replace('_', ' ')|title }}
-                    </span>
-                    <small class="text-muted last-updated"></small>
+<div class="container mt-4">
+    <div class="row">
+        <!-- Map and Live Tracking -->
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h4 class="card-title mb-0">Live Order Tracking</h4>
+                        <div>
+                            <button class="btn btn-outline-primary btn-sm" onclick="centerMap()">
+                                <i class="bi bi-geo-alt"></i> Center Map
+                            </button>
+                            <button class="btn btn-outline-secondary btn-sm" onclick="refreshTracking()">
+                                <i class="bi bi-arrow-clockwise"></i> Refresh
+                            </button>
+                        </div>
+                    </div>
+                    <div id="map" style="height: 500px; width: 100%; border-radius: 8px;"></div>
                 </div>
             </div>
         </div>
 
-        <div class="card mb-4">
-            <div class="card-body">
-                <h5 class="card-title">Delivery Details</h5>
-                {% if order.delivery_person %}
-                    <p><strong>Delivery Person:</strong><br>
-                    {{ order.delivery_person.username }}</p>
-                {% endif %}
-                
-                <p><strong>Pickup Location:</strong><br>
-                {{ order.shop.name }}<br>
-                {{ order.shop.address }}</p>
-                
-                <p><strong>Delivery Address:</strong><br>
-                {{ order.delivery_address }}</p>
-
-                <div class="estimated-time mt-3">
-                    <strong>Estimated Time:</strong><br>
-                    <span class="eta">Calculating...</span>
+        <!-- Order Information -->
+        <div class="col-md-4">
+            <!-- Order Status Card -->
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h5 class="card-title">Order Status</h5>
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <span class="badge bg-{{ {
+                            'pending': 'warning',
+                            'confirmed': 'info',
+                            'delivering': 'primary',
+                            'completed': 'success',
+                            'cancelled': 'danger'
+                        }[order.status] }} fs-6">
+                            {{ order.status|title }}
+                        </span>
+                        <small class="text-muted last-updated">Last updated: ...</small>
+                    </div>
+                    
+                    <!-- Order Timeline -->
+                    <div class="timeline mt-4">
+                        <div class="timeline-item">
+                            <div class="timeline-point bg-success"></div>
+                            <div class="timeline-content">
+                                <h6>Order Placed</h6>
+                                <p class="text-muted mb-0">
+                                    {{ order.created_at.strftime('%Y-%m-%d %H:%M') }}
+                                </p>
+                            </div>
+                        </div>
+                        
+                        {% if order.status != 'pending' %}
+                        <div class="timeline-item">
+                            <div class="timeline-point bg-info"></div>
+                            <div class="timeline-content">
+                                <h6>Order Confirmed</h6>
+                                <p class="text-muted mb-0">Processing for delivery</p>
+                            </div>
+                        </div>
+                        {% endif %}
+                        
+                        {% if order.status == 'delivering' %}
+                        <div class="timeline-item">
+                            <div class="timeline-point bg-primary"></div>
+                            <div class="timeline-content">
+                                <h6>Out for Delivery</h6>
+                                <p class="text-muted mb-0">
+                                    Estimated delivery by {{ order.estimated_delivery_time.strftime('%I:%M %p') }}
+                                </p>
+                            </div>
+                        </div>
+                        {% endif %}
+                        
+                        {% if order.status == 'completed' %}
+                        <div class="timeline-item">
+                            <div class="timeline-point bg-success"></div>
+                            <div class="timeline-content">
+                                <h6>Delivered</h6>
+                                <p class="text-muted mb-0">
+                                    {{ order.updated_at.strftime('%Y-%m-%d %H:%M') }}
+                                </p>
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
                 </div>
             </div>
-        </div>
 
-        <div class="card">
-            <div class="card-body">
-                <h5 class="card-title">Order Summary</h5>
-                <div class="table-responsive">
-                    <table class="table table-sm">
-                        <tbody>
-                            {% for item in order.items %}
-                            <tr>
-                                <td>{{ item.product.name }} x {{ item.quantity }}</td>
-                                <td class="text-end">${{ "%.2f"|format(item.subtotal) }}</td>
-                            </tr>
-                            {% endfor %}
-                            <tr class="fw-bold">
-                                <td>Total</td>
-                                <td class="text-end">${{ "%.2f"|format(order.total_amount) }}</td>
-                            </tr>
-                        </tbody>
-                    </table>
+            <!-- Delivery Details Card -->
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h5 class="card-title">Delivery Details</h5>
+                    
+                    {% if order.delivery_person %}
+                    <div class="mb-3">
+                        <p class="mb-1"><strong>Delivery Person:</strong></p>
+                        <div class="d-flex align-items-center">
+                            <i class="bi bi-person-circle fs-4 me-2"></i>
+                            <span>{{ order.delivery_person.username }}</span>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <div class="mb-3">
+                        <p class="mb-1"><strong>Pickup Location:</strong></p>
+                        <div class="d-flex align-items-start">
+                            <i class="bi bi-shop fs-5 me-2 mt-1"></i>
+                            <div>
+                                <p class="mb-1">{{ order.shop.name }}</p>
+                                <small class="text-muted">{{ order.shop.address }}</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <p class="mb-1"><strong>Delivery Address:</strong></p>
+                        <div class="d-flex align-items-start">
+                            <i class="bi bi-geo-alt fs-5 me-2 mt-1"></i>
+                            <div>
+                                <p class="mb-1">{{ order.delivery_address }}</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    {% if order.status == 'delivering' %}
+                    <div class="alert alert-info mb-3">
+                        <div class="d-flex align-items-center">
+                            <i class="bi bi-clock fs-5 me-2"></i>
+                            <div>
+                                <p class="mb-1"><strong>Estimated Time of Arrival:</strong></p>
+                                <span class="eta">Calculating...</span>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    {% if order.special_instructions %}
+                    <div class="alert alert-warning mb-0">
+                        <div class="d-flex align-items-start">
+                            <i class="bi bi-info-circle fs-5 me-2 mt-1"></i>
+                            <div>
+                                <p class="mb-1"><strong>Special Instructions:</strong></p>
+                                {{ order.special_instructions }}
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Order Summary Card -->
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Order Summary</h5>
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <tbody>
+                                {% for item in order.items %}
+                                <tr>
+                                    <td>{{ item.product.name }} × {{ item.quantity }}</td>
+                                    <td class="text-end">৳{{ "%.2f"|format(item.subtotal) }}</td>
+                                </tr>
+                                {% endfor %}
+                                <tr>
+                                    <td>Delivery Fee</td>
+                                    <td class="text-end">৳{{ "%.2f"|format(order.delivery_fee) }}</td>
+                                </tr>
+                                <tr class="fw-bold">
+                                    <td>Total</td>
+                                    <td class="text-end">৳{{ "%.2f"|format(order.total_amount + order.delivery_fee) }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block styles %}
+<style>
+.timeline {
+    position: relative;
+    padding-left: 2rem;
+}
+
+.timeline-item {
+    position: relative;
+    padding-bottom: 1.5rem;
+    border-left: 2px solid #dee2e6;
+    padding-left: 20px;
+}
+
+.timeline-item:last-child {
+    border-left: none;
+}
+
+.timeline-point {
+    position: absolute;
+    left: -11px;
+    top: 0;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: 3px solid white;
+    box-shadow: 0 0 0 2px;
+}
+
+.timeline-content {
+    padding-bottom: 10px;
+}
+
+.timeline-content h6 {
+    margin-bottom: 0.25rem;
+}
+
+/* Custom map controls */
+.custom-map-control-button {
+    background-color: #fff;
+    border: 0;
+    border-radius: 2px;
+    box-shadow: 0 1px 4px -1px rgba(0, 0, 0, 0.3);
+    margin: 10px;
+    padding: 0 0.5em;
+    font: 400 18px Roboto, Arial, sans-serif;
+    overflow: hidden;
+    height: 40px;
+    cursor: pointer;
+}
+
+.custom-map-control-button:hover {
+    background: #ebebeb;
+}
+</style>
 {% endblock %}
 
 {% block scripts %}
@@ -78,57 +253,106 @@ let destinationMarker;
 let directionsService;
 let directionsRenderer;
 let lastLocation = null;
-const updateInterval = 10000; // Update every 10 seconds
+let updateInterval;
 
 function initMap() {
     directionsService = new google.maps.DirectionsService();
     directionsRenderer = new google.maps.DirectionsRenderer({
-        suppressMarkers: true // We'll handle markers ourselves
+        suppressMarkers: true,
+        preserveViewport: true
     });
     
-    // Initialize map centered between shop and delivery address
+    // Calculate center point between shop and delivery location
     const centerLat = ({{ order.shop.location_lat }} + {{ order.delivery_lat }}) / 2;
     const centerLng = ({{ order.shop.location_lng }} + {{ order.delivery_lng }}) / 2;
     
+    // Initialize map
     map = new google.maps.Map(document.getElementById('map'), {
         zoom: 13,
-        center: { lat: centerLat, lng: centerLng }
+        center: { lat: centerLat, lng: centerLng },
+        mapTypeControl: false,
+        fullscreenControl: true,
+        streetViewControl: false
     });
     
     directionsRenderer.setMap(map);
     
-    // Add shop marker
+    // Add markers
     shopMarker = new google.maps.Marker({
         position: {
             lat: {{ order.shop.location_lat }},
             lng: {{ order.shop.location_lng }}
         },
         map: map,
-        icon: 'http://maps.google.com/mapfiles/ms/icons/blue-dot.png',
+        icon: {
+            url: 'http://maps.google.com/mapfiles/ms/icons/blue-dot.png',
+            scaledSize: new google.maps.Size(40, 40)
+        },
         title: '{{ order.shop.name }}'
     });
     
-    // Add destination marker
     destinationMarker = new google.maps.Marker({
         position: {
             lat: {{ order.delivery_lat }},
             lng: {{ order.delivery_lng }}
         },
         map: map,
-        icon: 'http://maps.google.com/mapfiles/ms/icons/green-dot.png',
+        icon: {
+            url: 'http://maps.google.com/mapfiles/ms/icons/red-dot.png',
+            scaledSize: new google.maps.Size(40, 40)
+        },
         title: 'Delivery Location'
     });
     
-    // Initialize delivery person marker (position will be updated)
-    deliveryMarker = new google.maps.Marker({
-        map: map,
-        icon: 'http://maps.google.com/mapfiles/ms/icons/yellow-dot.png',
-        title: '{{ order.delivery_person.username if order.delivery_person else "Delivery Person" }}'
+    // Info windows
+    const shopInfo = new google.maps.InfoWindow({
+        content: `<div style="padding: 10px;">
+            <strong>{{ order.shop.name }}</strong><br>
+            {{ order.shop.address }}
+        </div>`
     });
     
-    // Start tracking
-    updateDeliveryLocation();
-    setInterval(updateDeliveryLocation, updateInterval);
+    const destinationInfo = new google.maps.InfoWindow({
+        content: `<div style="padding: 10px;">
+            <strong>Delivery Location</strong><br>
+            {{ order.delivery_address }}
+        </div>`
+    });
+    
+    shopMarker.addListener('click', () => {
+        shopInfo.open(map, shopMarker);
+    });
+    
+    destinationMarker.addListener('click', () => {
+        destinationInfo.open(map, destinationMarker);
+    });
+    
+    // Initialize delivery tracking if order is being delivered
+    if ('{{ order.status }}' === 'delivering') {
+        deliveryMarker = new google.maps.Marker({
+            map: map,
+            icon: {
+                url: 'http://maps.google.com/mapfiles/ms/icons/yellow-dot.png',
+                scaledSize: new google.maps.Size(40, 40)
+            },
+            title: '{{ order.delivery_person.username if order.delivery_person else "Delivery Person" }}'
+        });
+        
+        const deliveryInfo = new google.maps.InfoWindow({
+            content: `<div style="padding: 10px;">
+                <strong>{{ order.delivery_person.username }}</strong><br>
+                Your delivery person
+            </div>`
+        });
+        
+        deliveryMarker.addListener('click', () => {
+            deliveryInfo.open(map, deliveryMarker);
+        });
+        
+        // Start tracking
+        updateDeliveryLocation();
+        updateInterval = setInterval(updateDeliveryLocation, 10000); // Update every 10 seconds
+    }
 }
 
 function updateDeliveryLocation() {
@@ -144,45 +368,96 @@ function updateDeliveryLocation() {
                 // Update marker position
                 deliveryMarker.setPosition(newLocation);
                 
-                // Update route if location has changed
+                // Update route if location has changed significantly
                 if (!lastLocation || 
-                    lastLocation.lat !== newLocation.lat || 
-                    lastLocation.lng !== newLocation.lng) {
+                    Math.abs(lastLocation.lat - newLocation.lat) > 0.0001 || 
+                    Math.abs(lastLocation.lng - newLocation.lng) > 0.0001) {
                     updateRoute(newLocation);
                     lastLocation = newLocation;
                 }
                 
                 // Update last updated time
+                const lastUpdated = new Date(data.location.last_updated);
                 document.querySelector('.last-updated').textContent = 
-                    'Last updated: ' + new Date().toLocaleTimeString();
+                    `Last updated: ${lastUpdated.toLocaleTimeString()}`;
+                
+                // Update ETA
+                updateETA(newLocation);
             }
         })
-        .catch(error => console.error('Error updating delivery location:', error));
+        .catch(error => {
+            console.error('Error fetching delivery location:', error);
+        });
 }
 
-function updateRoute(currentLocation) {
-    // Calculate route from current location to delivery address
-    const request = {
-        origin: currentLocation,
-        destination: {
-            lat: {{ order.delivery_lat }},
-            lng: {{ order.delivery_lng }}
-        },
-        travelMode: 'DRIVING'
+function updateRoute(deliveryLocation) {
+    const shopLocation = {
+        lat: {{ order.shop.location_lat }}, 
+        lng: {{ order.shop.location_lng }}
+    };
+    const destinationLocation = {
+        lat: {{ order.delivery_lat }}, 
+        lng: {{ order.delivery_lng }}
     };
     
-    directionsService.route(request, (result, status) => {
+    const waypoints = [];
+    if (!{{ order.pickup_time|tojson }}) {
+        waypoints.push({
+            location: shopLocation,
+            stopover: true
+        });
+    }
+    
+    directionsService.route({
+        origin: deliveryLocation,
+        destination: destinationLocation,
+        waypoints: waypoints,
+        optimizeWaypoints: true,
+        travelMode: google.maps.TravelMode.DRIVING
+    }, function(response, status) {
         if (status === 'OK') {
-            directionsRenderer.setDirections(result);
-            
-            // Update ETA
-            const route = result.routes[0];
-            if (route.legs.length) {
-                const duration = route.legs[0].duration.text;
-                document.querySelector('.eta').textContent = duration;
-            }
+            directionsRenderer.setDirections(response);
         }
     });
 }
+
+function updateETA(deliveryLocation) {
+    const destination = {
+        lat: {{ order.delivery_lat }}, 
+        lng: {{ order.delivery_lng }}
+    };
+    
+    directionsService.route({
+        origin: deliveryLocation,
+        destination: destination,
+        travelMode: google.maps.TravelMode.DRIVING
+    }, function(response, status) {
+        if (status === 'OK') {
+            const duration = response.routes[0].legs[0].duration.text;
+            document.querySelector('.eta').textContent = 
+                `Arriving in approximately ${duration}`;
+        }
+    });
+}
+
+function centerMap() {
+    if (deliveryMarker && map) {
+        map.panTo(deliveryMarker.getPosition());
+        map.setZoom(14);
+    }
+}
+
+function refreshTracking() {
+    if ('{{ order.status }}' === 'delivering') {
+        updateDeliveryLocation();
+    }
+}
+
+// Clean up interval on page unload
+window.addEventListener('beforeunload', function() {
+    if (updateInterval) {
+        clearInterval(updateInterval);
+    }
+});
 </script>
 {% endblock %}
