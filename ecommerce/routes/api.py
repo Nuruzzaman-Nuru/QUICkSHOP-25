@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify, request, session
+from flask import Blueprint, jsonify, request, session, url_for
 from flask_login import login_required, current_user
 from ..models.user import User
 from ..models.shop import Shop, Product
@@ -724,7 +724,7 @@ def search_suggestions():
             Product.description.ilike(f'%{query}%'),
             Product.category.ilike(f'%{query}%')
         )
-    ).with_entities(Product.name, Product.category).distinct().limit(5).all()
+    ).limit(5).all()
     
     # Get matching shops if not searching within a specific shop
     shops = []
@@ -737,37 +737,38 @@ def search_suggestions():
                     Shop.description.ilike(f'%{query}%')
                 )
             )
-        ).with_entities(Shop.name).distinct().limit(3).all()
+        ).limit(3).all()
     
     # Format suggestions
     results = []
     
     # Add product suggestions
-    for name, category in products:
-        if name.lower().startswith(query.lower()):
-            results.append({
-                'text': name,
-                'type': 'product',
-                'category': category
-            })
-        if category and category.lower().startswith(query.lower()):
-            results.append({
-                'text': category,
-                'type': 'category'
-            })
-    
-    # Add shop suggestions
-    for (name,) in shops:
+    for product in products:
         results.append({
-            'text': name,
-            'type': 'shop'
+            'name': product.name,
+            'type': 'product',
+            'url': url_for('shop.view', shop_id=product.shop_id, highlight=product.id),
+            'category': product.category,
+            'price': float(product.price)
         })
     
-    # Deduplicate and limit results
-    seen = set()
-    results = [x for x in results if not (x['text'] in seen or seen.add(x['text']))][:5]
+    # Add shop suggestions
+    for shop in shops:
+        results.append({
+            'name': shop.name,
+            'type': 'shop',
+            'url': url_for('shop.view', shop_id=shop.id)
+        })
     
-    return jsonify(results)
+    # Deduplicate and limit results while preserving order
+    seen = set()
+    unique_results = []
+    for item in results:
+        if item['name'] not in seen:
+            seen.add(item['name'])
+            unique_results.append(item)
+    
+    return jsonify(unique_results[:5])
 
 @api_bp.route('/calculate-shipping', methods=['POST'])
 @login_required

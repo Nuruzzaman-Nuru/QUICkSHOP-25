@@ -1017,6 +1017,141 @@ footer ul li a:hover {
     color: #4299e1;
 }
 
+/* Global search styles */
+.search-form {
+    width: 100%;
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.search-form .input-group {
+    background: #fff;
+    border-radius: 8px;
+    transition: all 0.3s ease;
+}
+
+.search-form .input-group:focus-within {
+    box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.25);
+}
+
+.search-form .search-input {
+    border-right: none;
+    padding-left: 1rem;
+    font-size: 1rem;
+}
+
+.search-form .btn {
+    padding: 0.5rem 1.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.search-form .btn i {
+    font-size: 1.1rem;
+}
+
+.suggestion-item.active {
+    background-color: #f8f9fa;
+}
+
+/* Make search more prominent in header */
+.navbar .search-form {
+    flex-grow: 1;
+    max-width: 600px;
+    margin: 0 2rem;
+}
+
+@media (max-width: 992px) {
+    .navbar .search-form {
+        margin: 1rem 0;
+    }
+}
+
+/* Search results page specific styles */
+.search-results-summary {
+    color: #6c757d;
+    font-size: 0.9rem;
+    margin-bottom: 1.5rem;
+}
+
+.search-filter-card {
+    position: sticky;
+    top: 1rem;
+}
+
+.search-results-container {
+    min-height: 400px;
+}
+
+.search-highlight {
+    background-color: rgba(255, 221, 87, 0.4);
+    padding: 0.1em 0;
+}
+
+/* Search suggestions styles */
+.search-container {
+    position: relative;
+}
+
+.search-suggestions {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 0 0 8px 8px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    z-index: 1000;
+    max-height: 300px;
+    overflow-y: auto;
+    display: none;
+}
+
+.suggestion-item {
+    padding: 0.75rem 1rem;
+    display: flex;
+    align-items: center;
+    color: #333;
+    text-decoration: none;
+    transition: background-color 0.2s;
+    border-bottom: 1px solid #eee;
+}
+
+.suggestion-item:last-child {
+    border-bottom: none;
+}
+
+.suggestion-item:hover,
+.suggestion-item:focus,
+.suggestion-item.active {
+    background-color: #f8f9fa;
+    text-decoration: none;
+    outline: none;
+}
+
+.suggestion-icon {
+    margin-right: 0.75rem;
+    color: #6c757d;
+    width: 20px;
+    text-align: center;
+}
+
+.suggestion-content {
+    flex: 1;
+}
+
+.suggestion-title {
+    font-weight: 500;
+    margin-bottom: 0.25rem;
+}
+
+.suggestion-metadata {
+    font-size: 0.875rem;
+    color: #6c757d;
+}
+
 /* Responsive styles */
 @media (max-width: 768px) {
     .banner-section {

@@ -67,13 +67,10 @@ def search():
     max_price = request.args.get('max_price', type=float)
     sort = request.args.get('sort', 'relevance')
     
-    if not any([query, category, min_price, max_price, shop_id]):
-        return redirect(url_for('main.index'))
-    
-    # Product search
+    # Initialize queries
     product_query = Product.query.filter(Product.shop.has(Shop.is_active == True))
     shop_query = Shop.query.filter_by(is_active=True)
-
+    
     # Apply shop filter if specified
     if shop_id:
         shop = Shop.query.get_or_404(shop_id)
@@ -119,23 +116,29 @@ def search():
             product_query = product_query.order_by(Product.created_at.desc())
         else:  # relevance
             if query:
+                # Custom relevance scoring based on where the match occurs
                 product_query = product_query.order_by(
                     func.case(
-                        (Product.name.ilike(f'%{query}%'), 0),
+                        (Product.name.ilike(f'%{query}%'), 0),  # Highest priority
                         (Product.category.ilike(f'%{query}%'), 1),
                         (Product.description.ilike(f'%{query}%'), 2),
                         else_=3
                     )
                 )
     
+    # Execute queries based on search type
     products = product_query.all() if search_type != 'shops' else []
     shops = shop_query.all() if search_type != 'products' and not shop_id else []
     
     # Get unique categories for filter options
-    categories = db.session.query(Product.category).distinct().filter(Product.category != None).all()
+    categories = db.session.query(Product.category)\
+                         .distinct()\
+                         .filter(Product.category != None)\
+                         .order_by(Product.category)\
+                         .all()
     categories = [cat[0] for cat in categories]
     
-    return render_template('main/search_results.html', 
+    return render_template('main/search_results.html',
                          products=products,
                          shops=shops,
                          query=query,
