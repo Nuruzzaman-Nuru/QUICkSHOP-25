@@ -1,8 +1,10 @@
-from flask import Blueprint, render_template, session, send_from_directory, request, redirect, url_for
+from flask import Blueprint, render_template, session, send_from_directory, request, redirect, url_for, jsonify
 from flask_login import login_required
 from sqlalchemy import or_, func, and_
 from ..models.shop import Shop, Product
+from .. import db
 from .api import init_cart
+from ..routes.auth import customer_required
 
 main_bp = Blueprint('main', __name__)
 
@@ -11,8 +13,17 @@ def index():
     featured_shops = Shop.query.filter_by(is_active=True).limit(6).all()
     return render_template('main/home.html', featured_shops=featured_shops)
 
+@main_bp.route('/about')
+def about():
+    return render_template('main/about.html')
+
+@main_bp.route('/projects')
+def projects():
+    return render_template('main/projects.html')
+
 @main_bp.route('/checkout')
 @login_required
+@customer_required
 def checkout():
     init_cart()
     cart = session.get('cart', {})
@@ -37,6 +48,7 @@ def checkout():
 
 @main_bp.route('/cart')
 @login_required
+@customer_required
 def cart():
     init_cart()
     return render_template('main/cart.html')
@@ -134,6 +146,20 @@ def search():
                          max_price=max_price,
                          current_sort=sort,
                          shop=Shop.query.get(shop_id) if shop_id else None)
+
+@main_bp.route('/contact', methods=['GET'])
+def contact_page():
+    return render_template('main/contact.html')
+
+@main_bp.route('/contact', methods=['POST'])
+def contact_submit():
+    data = request.get_json()
+    # Here you would typically send an email or save to database
+    # For now, we'll just return a success response
+    return jsonify({
+        'status': 'success',
+        'message': 'Thank you for your message. We will get back to you soon!'
+    })
 
 @main_bp.app_errorhandler(404)
 def not_found_error(error):

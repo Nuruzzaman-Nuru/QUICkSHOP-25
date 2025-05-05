@@ -8,23 +8,6 @@
         <h1>Welcome, {{ current_user.username }}</h1>
     </div>
 
-    <!-- Quick Actions Section -->
-    <div class="mb-4">
-        <h2 class="mb-3">Quick Actions</h2>
-        <div class="d-flex flex-wrap gap-3">
-            <a href="{{ url_for('main.cart') }}" class="btn btn-primary">
-                <i class="bi bi-cart me-2"></i>View Cart
-            </a>
-            <a href="{{ url_for('user.settings') }}" class="btn btn-secondary">
-                <i class="bi bi-gear me-2"></i>Account Settings
-            </a>
-           
-            <a href="{{ url_for('user.orders') }}" class="btn btn-secondary">
-                <i class="bi bi-clock-history me-2"></i>Order History
-            </a>
-        </div>
-    </div>
-
     <div class="admin-stats">
         <div class="dashboard-card">
             <h3>Active Orders</h3>

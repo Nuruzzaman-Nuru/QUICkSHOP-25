@@ -133,3 +133,107 @@ def process_negotiation(negotiation, offered_price):
         'counter_price': counter_offer,
         'message': message
     }
+
+class DeliveryNegotiationBot:
+    def __init__(self, order):
+        self.order = order
+        self.base_fee = 5.00  # Base delivery fee
+        self.min_fee = 3.00  # Minimum acceptable delivery fee
+        self.max_discount = 0.40  # Maximum 40% discount
+        self.negotiation_rounds = 0
+        self.last_offer = None
+        self.last_counter = None
+        
+        # Strategy parameters adjusted for delivery
+        self.eagerness = 0.6  # More conservative for delivery fees
+        self.flexibility = 0.5  # Less flexible than product negotiations
+        
+        # Adjust min_fee based on distance if available
+        if order.delivery_lat and order.delivery_lng and order.shop.location_lat and order.shop.location_lng:
+            from ...utils.distance import calculate_distance
+            distance = calculate_distance(
+                order.shop.location_lat,
+                order.shop.location_lng,
+                order.delivery_lat,
+                order.delivery_lng
+            )
+            # Minimum fee increases with distance
+            self.min_fee = max(3.00, 2.00 + (distance * 0.50))  # $2 base + $0.50 per km
+            self.base_fee = max(5.00, 3.00 + (distance * 0.75))  # $3 base + $0.75 per km
+
+    def evaluate_offer(self, offered_fee):
+        self.negotiation_rounds += 1
+        self.last_offer = offered_fee
+        
+        # Quick rejects
+        if offered_fee >= self.base_fee:
+            return 'reject', None, "Please use the standard delivery fee if you're willing to pay the full amount."
+        
+        if offered_fee < self.min_fee:
+            return 'reject', None, f"I'm sorry, but ${offered_fee:.2f} is too low for the delivery distance. The minimum fee is ${self.min_fee:.2f}"
+            
+        # Calculate discount percentage
+        discount = (self.base_fee - offered_fee) / self.base_fee
+        if discount > self.max_discount:
+            return 'reject', None, f"That's too low. The maximum discount we can offer on delivery is {self.max_discount*100:.0f}%"
+        
+        # Decision making
+        if self._should_accept(offered_fee):
+            return 'accept', None, "Great! We'll deliver for that price!"
+            
+        counter_offer = self._calculate_counter_offer()
+        self.last_counter = counter_offer
+        return 'counter', counter_offer, self._get_counter_message(counter_offer)
+
+    def _should_accept(self, offered_fee):
+        """Determine if an offer should be accepted"""
+        # More likely to accept as rounds increase
+        round_factor = min(self.negotiation_rounds / 4, 1)  # Fewer rounds for delivery negotiations
+        
+        # More likely to accept if close to target fee
+        price_factor = (offered_fee - self.min_fee) / (self.base_fee - self.min_fee)
+        
+        # Combined acceptance probability
+        acceptance_prob = (round_factor + price_factor + self.eagerness) / 3
+        return acceptance_prob > 0.85  # Higher threshold for acceptance
+
+    def _calculate_counter_offer(self):
+        """Calculate a counter-offer based on the negotiation state"""
+        if not self.last_offer:
+            # Initial counter offer
+            discount = self.max_discount * (1 - self.eagerness)
+            return self.base_fee * (1 - discount)
+            
+        # Calculate middle ground, weighted by flexibility
+        target = self.last_offer + (self.base_fee - self.last_offer) * self.flexibility
+        
+        # Ensure counter offer is within bounds
+        return max(min(target, self.base_fee), self.min_fee)
+
+    def _get_counter_message(self, counter_offer):
+        """Generate a message for the counter offer"""
+        discount = (self.base_fee - counter_offer) / self.base_fee * 100
+        
+        messages = [
+            f"I can do the delivery for ${counter_offer:.2f}. That's a {discount:.1f}% discount!",
+            f"How about ${counter_offer:.2f}? That's quite reasonable for the distance.",
+            f"I can offer delivery at ${counter_offer:.2f}. What do you think?",
+            f"Let's settle at ${counter_offer:.2f} for delivery?"
+        ]
+        
+        return messages[self.negotiation_rounds % len(messages)]
+
+def create_delivery_negotiation_session(order):
+    """Create a new delivery fee negotiation session"""
+    return DeliveryNegotiationBot(order)
+
+def process_delivery_negotiation(negotiation, offered_fee):
+    """Process a delivery fee negotiation offer and return the result"""
+    bot = create_delivery_negotiation_session(negotiation.order)
+    decision, counter_offer, message = bot.evaluate_offer(offered_fee)
+    
+    return {
+        'accepted': decision == 'accept',
+        'counter_fee': counter_offer,
+        'message': message
+    }

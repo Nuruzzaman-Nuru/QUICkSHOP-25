@@ -3,15 +3,17 @@ from flask_login import login_required, current_user
 from ..models.user import User
 from ..models.shop import Shop, Product
 from ..models.order import Order, OrderItem
-from ..models.negotiation import Negotiation
-from ..utils.ai.negotiation_bot import create_negotiation_session
+from ..models.negotiation import Negotiation, DeliveryNegotiation
+from ..utils.ai.negotiation_bot import create_negotiation_session, create_delivery_negotiation_session, process_delivery_negotiation
 from ..utils.notifications import (
     notify_shop_owner_new_order,
     notify_customer_order_status,
     notify_admin_order_status
 )
+from ..utils.distance import calculate_distance
 from .. import db
 from sqlalchemy import or_, and_
+from ..routes.auth import customer_required
 
 api_bp = Blueprint('api', __name__, url_prefix='/api')
 
@@ -102,6 +104,7 @@ def dashboard_stats():
 
 @api_bp.route('/add', methods=['POST'])
 @login_required
+@customer_required
 def add_to_cart():
     try:
         init_cart()
@@ -127,33 +130,23 @@ def add_to_cart():
                 'message': 'Product is out of stock'
             }), 400
         
-        # Check if requested quantity is available
-        if product.stock < quantity:
+        # Get current quantity in cart
+        current_quantity = session['cart'].get(product_id, {}).get('quantity', 0)
+        total_quantity = current_quantity + quantity
+        
+        # Check if total requested quantity is available
+        if product.stock < total_quantity:
             return jsonify({
                 'status': 'error',
                 'message': f'Only {product.stock} items available'
             }), 400
         
-        # Get current cart quantity if product exists
-        current_quantity = session['cart'].get(product_id, {}).get('quantity', 0)
-        
-        # Check if total quantity exceeds stock
-        if (current_quantity + quantity) > product.stock:
-            return jsonify({
-                'status': 'error',
-                'message': f'Cannot add {quantity} more items. Only {product.stock - current_quantity} available'
-            }), 400
-        
-        if product_id in session['cart']:
-            # Update existing cart item
-            session['cart'][product_id]['quantity'] += quantity
-        else:
-            # Add new cart item
-            session['cart'][product_id] = {
-                'quantity': quantity,
-                'price': negotiated_price if negotiated_price else float(product.price),
-                'name': product.name  # Add product name for display
-            }
+        # Update or add cart item
+        session['cart'][product_id] = {
+            'quantity': total_quantity,
+            'price': negotiated_price if negotiated_price else float(product.price),
+            'name': product.name
+        }
         
         session.modified = True
         
@@ -176,6 +169,7 @@ def add_to_cart():
 
 @api_bp.route('/update', methods=['POST'])
 @login_required
+@customer_required
 def update_cart():
     data = request.get_json()
     product_id = str(data.get('product_id'))
@@ -204,6 +198,7 @@ def update_cart():
 
 @api_bp.route('/remove', methods=['POST'])
 @login_required
+@customer_required
 def remove_from_cart():
     data = request.get_json()
     product_id = str(data.get('product_id'))
@@ -219,6 +214,7 @@ def remove_from_cart():
 
 @api_bp.route('/checkout', methods=['POST'])
 @login_required
+@customer_required
 def checkout():
     init_cart()
     data = request.get_json()
@@ -328,6 +324,7 @@ def checkout():
 
 @api_bp.route('/cart/count')
 @login_required
+@customer_required
 def get_cart_count():
     cart = init_cart()
     count = sum(item['quantity'] for item in cart.values())
@@ -338,6 +335,7 @@ def get_cart_count():
 
 @api_bp.route('/cart/items')
 @login_required
+@customer_required
 def get_cart_items():
     cart = init_cart()
     items = []
@@ -369,6 +367,7 @@ def get_cart_items():
 
 @api_bp.route('/cart/change', methods=['POST'])
 @login_required
+@customer_required
 def notify_cart_change():
     """Notify about cart changes for real-time updates"""
     init_cart()
@@ -401,6 +400,7 @@ def notify_cart_change():
 
 @api_bp.route('/cart/apply-voucher', methods=['POST'])
 @login_required
+@customer_required
 def apply_voucher():
     """Apply a voucher code to the cart"""
     data = request.get_json()
@@ -421,6 +421,7 @@ def apply_voucher():
 
 @api_bp.route('/cart/batch-delete', methods=['POST'])
 @login_required
+@customer_required
 def batch_delete_cart_items():
     """Delete multiple items from cart at once"""
     data = request.get_json()
@@ -440,6 +441,7 @@ def batch_delete_cart_items():
 
 @api_bp.route('/cart/shipping-address', methods=['GET', 'POST'])
 @login_required
+@customer_required
 def cart_shipping_address():
     """Get or update shipping address for cart"""
     if request.method == 'POST':
@@ -586,6 +588,117 @@ def accept_negotiation(negotiation_id):
             'message': 'No counter offer available'
         }), 400
 
+@api_bp.route('/negotiate/delivery/<int:order_id>', methods=['POST'])
+@login_required
+def negotiate_delivery_fee(order_id):
+    """Start or continue a delivery fee negotiation"""
+    order = Order.query.get_or_404(order_id)
+    
+    if order.customer_id != current_user.id:
+        return jsonify({
+            'status': 'error',
+            'message': 'Access denied'
+        }), 403
+    
+    data = request.get_json()
+    offered_fee = float(data.get('offered_fee'))
+    
+    # Get existing negotiation or create new one
+    negotiation = DeliveryNegotiation.query.filter_by(
+        order_id=order_id,
+        customer_id=current_user.id,
+        status='pending'
+    ).first()
+    
+    if not negotiation:
+        # Calculate base delivery fee based on distance
+        from ..utils.distance import calculate_distance
+        distance = calculate_distance(
+            order.shop.location_lat,
+            order.shop.location_lng,
+            order.delivery_lat,
+            order.delivery_lng
+        )
+        base_fee = max(5.00, 3.00 + (distance * 0.75))  # $3 base + $0.75 per km
+        
+        negotiation = DeliveryNegotiation(
+            order_id=order_id,
+            customer_id=current_user.id,
+            initial_fee=base_fee,
+            offered_fee=offered_fee
+        )
+        db.session.add(negotiation)
+    else:
+        negotiation.offered_fee = offered_fee
+        negotiation.rounds += 1
+    
+    # Process with AI negotiation bot
+    bot = create_delivery_negotiation_session(order)
+    decision, counter_fee, message = bot.evaluate_offer(offered_fee)
+    
+    if decision == 'accept':
+        negotiation.accept_offer(offered_fee)
+        # Update order with negotiated delivery fee
+        order.delivery_fee = offered_fee
+    elif decision == 'reject':
+        negotiation.reject_offer()
+    else:  # counter
+        negotiation.add_counter_offer(counter_fee)
+        
+    db.session.commit()
+    
+    return jsonify({
+        'status': 'success',
+        'decision': decision,
+        'message': message,
+        'counter_fee': counter_fee,
+        'negotiation': {
+            'id': negotiation.id,
+            'initial_fee': negotiation.initial_fee,
+            'offered_fee': negotiation.offered_fee,
+            'counter_fee': negotiation.counter_fee,
+            'final_fee': negotiation.final_fee,
+            'status': negotiation.status,
+            'rounds': negotiation.rounds
+        }
+    })
+
+@api_bp.route('/negotiate/delivery/<int:negotiation_id>/accept', methods=['POST'])
+@login_required
+def accept_delivery_negotiation(negotiation_id):
+    """Accept a delivery fee counter-offer"""
+    negotiation = DeliveryNegotiation.query.get_or_404(negotiation_id)
+    
+    if negotiation.customer_id != current_user.id:
+        return jsonify({
+            'status': 'error',
+            'message': 'Access denied'
+        }), 403
+    
+    if negotiation.status not in ['pending', 'counter_offer']:
+        return jsonify({
+            'status': 'error',
+            'message': 'This negotiation is no longer active'
+        }), 400
+    
+    # Accept the last counter offer
+    if negotiation.counter_fee:
+        negotiation.accept_offer(negotiation.counter_fee)
+        # Update order with negotiated delivery fee
+        negotiation.order.delivery_fee = negotiation.counter_fee
+        db.session.commit()
+        
+        return jsonify({
+            'status': 'success',
+            'message': 'Delivery fee negotiation accepted',
+            'final_fee': negotiation.final_fee
+        })
+    else:
+        return jsonify({
+            'status': 'error',
+            'message': 'No counter offer available'
+        }), 400
+
 @api_bp.route('/search/suggestions')
 def search_suggestions():
     query = request.args.get('q', '')
@@ -655,3 +768,50 @@ def search_suggestions():
     results = [x for x in results if not (x['text'] in seen or seen.add(x['text']))][:5]
     
     return jsonify(results)
+
+@api_bp.route('/calculate-shipping', methods=['POST'])
+@login_required
+def calculate_shipping():
+    data = request.get_json()
+    lat = data.get('lat')
+    lng = data.get('lng')
+    
+    if not all([lat, lng]):
+        return jsonify({
+            'status': 'error',
+            'message': 'Coordinates are required'
+        }), 400
+    
+    # Get shop coordinates from the cart items' shops
+    cart = session.get('cart', {})
+    shop_distances = []
+    
+    for product_id in cart:
+        product = Product.query.get(product_id)
+        if product and product.shop:
+            shop = product.shop
+            if shop.location_lat and shop.location_lng:
+                distance = calculate_distance(
+                    shop.location_lat,
+                    shop.location_lng,
+                    float(lat),
+                    float(lng)
+                )
+                shop_distances.append(distance)
+    
+    if not shop_distances:
+        return jsonify({
+            'status': 'error',
+            'message': 'Unable to calculate shipping - shop location not available'
+        }), 400
+    
+    # Use the maximum distance to calculate base shipping fee
+    max_distance = max(shop_distances)
+    base_fee = max(5.00, 3.00 + (max_distance * 0.75))  # $3 base + $0.75 per km
+    
+    return jsonify({
+        'status': 'success',
+        'shipping_fee': base_fee,
+        'distance': max_distance,
+        'is_negotiable': True
+    })

@@ -76,20 +76,238 @@ main {
     margin: 0 auto;
 }
 
-/* Navbar customization */
+/* Navbar styling */
 .navbar {
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    width: 100%;
+    background: linear-gradient(to right, #1e1f32, #3a3f67);
+    padding: 0.8rem 0;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    position: sticky;
+    top: 0;
+    z-index: 1000;
 }
 
-.navbar-brand {
-    font-size: 1.5rem;
+.navbar .container {
+    padding: 0 1.5rem;
+}
+
+.navbar-brand, .logo {
+    color: #ffffff !important;
+    font-size: 1.4rem;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    padding: 0;
+}
+
+.navbar .nav-link {
+    color: rgba(255, 255, 255, 0.9) !important;
     font-weight: 500;
+    padding: 0.5rem 1rem !important;
+    transition: all 0.3s ease;
+    position: relative;
 }
 
-.navbar-brand .bi {
-    font-size: 1.25em;
-    vertical-align: -0.125em;
+.navbar .nav-link:hover {
+    color: #ffffff !important;
+}
+
+.navbar .nav-link::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    width: 0;
+    height: 2px;
+    background: #ffffff;
+    transition: all 0.3s ease;
+    transform: translateX(-50%);
+}
+
+.navbar .nav-link:hover::after {
+    width: 70%;
+}
+
+/* Role-specific navigation styles */
+.navbar .nav-item .nav-link i {
+    margin-right: 0.4rem;
+}
+
+/* Admin specific styles */
+.navbar .admin-nav .nav-link {
+    color: #1a237e;
+}
+
+.navbar .admin-nav .nav-link:hover {
+    color: #0d47a1;
+}
+
+/* Shop owner specific styles */
+.navbar .shop-owner-nav .nav-link {
+    color: #2e7d32;
+}
+
+.navbar .shop-owner-nav .nav-link:hover {
+    color: #1b5e20;
+}
+
+/* Delivery person specific styles */
+.navbar .delivery-nav .nav-link {
+    color: #d84315;
+}
+
+.navbar .delivery-nav .nav-link:hover {
+    color: #bf360c;
+}
+
+/* Customer specific styles */
+.navbar .customer-nav .nav-link {
+    color: #0277bd;
+}
+
+.navbar .customer-nav .nav-link:hover {
+    color: #01579b;
+}
+
+/* Common dropdown styles */
+.navbar .dropdown-menu {
+    border-radius: 0.5rem;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.navbar .dropdown-item {
+    padding: 0.5rem 1rem;
+    display: flex;
+    align-items: center;
+}
+
+.navbar .dropdown-item i {
+    margin-right: 0.5rem;
+    width: 1.2rem;
+    text-align: center;
+}
+
+.navbar .dropdown-item:hover {
+    background-color: #f8f9fa;
+}
+
+.navbar .dropdown-menu {
+    border: none;
+    border-radius: 8px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    padding: 0.5rem 0;
+    margin-top: 0.5rem;
+    animation: dropdownFade 0.3s ease;
+}
+
+.navbar .dropdown-item {
+    padding: 0.6rem 1.5rem;
+    color: #424242;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+.navbar .dropdown-item:hover {
+    background-color: #f5f5f5;
+    color: #1a237e;
+    transform: translateX(5px);
+}
+
+.navbar .dropdown-item i {
+    margin-right: 0.5rem;
+    font-size: 1.1rem;
+    vertical-align: -2px;
+}
+
+.navbar .badge {
+    padding: 0.35em 0.65em;
+    font-size: 0.75em;
+    font-weight: 600;
+    border-radius: 6px;
+}
+
+.navbar .search-input {
+    border-radius: 20px;
+    padding: 0.5rem 1rem;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+    width: 250px;
+    transition: all 0.3s ease;
+}
+
+.navbar .search-input:focus {
+    background: rgba(255, 255, 255, 0.15);
+    border-color: rgba(255, 255, 255, 0.3);
+    box-shadow: 0 0 0 0.2rem rgba(255, 255, 255, 0.1);
+}
+
+.navbar .search-input::placeholder {
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.navbar .btn-outline-primary {
+    color: #ffffff;
+    border-color: rgba(255, 255, 255, 0.6);
+    padding: 0.5rem 1.2rem;
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
+
+.navbar .btn-outline-primary:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: #ffffff;
+    transform: translateY(-1px);
+}
+
+.navbar .navbar-toggler {
+    border: none;
+    padding: 0.5rem;
+}
+
+.navbar .navbar-toggler:focus {
+    box-shadow: none;
+}
+
+.navbar .navbar-toggler-icon {
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='rgba(255, 255, 255, 0.9)' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e");
+}
+
+@keyframes dropdownFade {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@media (max-width: 991.98px) {
+    .navbar .nav-link::after {
+        display: none;
+    }
+    
+    .navbar .dropdown-menu {
+        border: none;
+        background: rgba(255, 255, 255, 0.05);
+        box-shadow: none;
+        padding: 0;
+    }
+    
+    .navbar .dropdown-item {
+        color: rgba(255, 255, 255, 0.8);
+        padding: 0.7rem 1.5rem;
+    }
+    
+    .navbar .dropdown-item:hover {
+        background: rgba(255, 255, 255, 0.1);
+        color: #ffffff;
+    }
+    
+    .navbar .search-input {
+        width: 100%;
+        margin: 0.5rem 0;
+    }
 }
 
 /* Login section styles */
@@ -239,6 +457,36 @@ main {
     gap: 2rem;
     padding: 2rem;
     background-color: #f8fafc;
+}
+
+/* User Dashboard Navigation Styles */
+.dashboard-container .navbar {
+    padding: 1rem;
+    margin-bottom: 2rem;
+    border-radius: 8px;
+}
+
+.dashboard-container .navbar .nav-link {
+    padding: 0.5rem 1rem;
+    color: #475569;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    border-radius: 6px;
+    margin: 0 0.25rem;
+}
+
+.dashboard-container .navbar .nav-link:hover {
+    background-color: #f1f5f9;
+    color: #1e40af;
+}
+
+.dashboard-container .navbar .nav-link.active {
+    background-color: #e0e7ff;
+    color: #1e40af;
+}
+
+.dashboard-container .navbar .nav-link i {
+    margin-right: 0.5rem;
 }
 
 /* Common dashboard card styles */
@@ -634,6 +882,139 @@ footer ul li a:hover {
         width: 60px;
         height: 40px;
     }
+}
+
+/* Product card date badge */
+.product-card {
+    position: relative;
+}
+
+.date-badge {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background-color: rgba(255, 255, 255, 0.9);
+    color: #1b2337;
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    z-index: 1;
+}
+
+/* Header and Clock Styles */
+.clock-container {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    padding: 4px 10px;
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    background: rgba(27, 35, 55, 0.75);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    border-radius: 6px;
+    z-index: 1000;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    min-width: 120px;
+    transform: scale(0.8);
+    transition: all 0.3s ease;
+}
+
+.clock-container:hover {
+    transform: scale(0.85);
+    background: rgba(27, 35, 55, 0.9);
+}
+
+#time {
+    font-size: 1rem;
+    font-weight: 500;
+    color: #ffffff;
+    margin-bottom: 0;
+    letter-spacing: 0.5px;
+}
+
+#date {
+    font-size: 0.7rem;
+    color: rgba(255, 255, 255, 0.8);
+}
+
+/* Contact section styles */
+#contact {
+    background-color: #f8fafc;
+    scroll-margin-top: 80px; /* Adds margin for smooth scroll */
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 0.6s ease, transform 0.6s ease;
+}
+
+#contact.visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+#contact .card {
+    border: none;
+    box-shadow: 0 0 15px rgba(0,0,0,0.1);
+    transition: transform 0.3s ease;
+}
+
+#contact .card:hover {
+    transform: translateY(-5px);
+}
+
+#contact .form-control {
+    border-radius: 8px;
+    padding: 12px;
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+#contact .form-control:focus {
+    border-color: #4299e1;
+    box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.15);
+}
+
+#contact textarea.form-control {
+    resize: none;
+}
+
+#contact .btn-primary {
+    padding: 12px;
+    font-weight: 500;
+    border-radius: 8px;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+#contact .btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+/* Contact information cards */
+.contact-info-card {
+    border: none;
+    box-shadow: 0 0 15px rgba(0,0,0,0.1);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.contact-info-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+}
+
+.contact-info-card .bi {
+    color: #4299e1;
+}
+
+.contact-info-card a {
+    color: #4a5568;
+    transition: color 0.3s ease;
+}
+
+.contact-info-card a:hover {
+    color: #4299e1;
 }
 
 /* Responsive styles */

@@ -123,7 +123,8 @@
                 <div class="row">
                     {% for product in products %}
                         <div class="col-md-4 mb-4">
-                            <div class="card h-100">
+                            <div class="card h-100 product-card">
+                                <span class="date-badge">May 5, 2025</span>
                                 {% if product.image_url %}
                                     <img src="{{ url_for('static', filename='images/products/' + product.image_url) }}" 
                                          class="card-img-top" alt="{{ product.name }}">

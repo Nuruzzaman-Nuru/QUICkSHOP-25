@@ -3,6 +3,12 @@
 {% block title %}Welcome{% endblock %}
 
 {% block content %}
+<!-- Clock Component -->
+<div class="clock-container">
+    <span id="time"></span>
+    <span id="date"></span>
+</div>
+
 <!-- Banner Section -->
 <div class="banner-section">
     <div class="banner-content">
@@ -27,20 +33,6 @@
         <span class="banner-dot"></span>
     </div>
 </div>
-
-<!-- Hero Section -->
-<section class="hero bg-light py-5">
-    <div class="container">
-        <div class="row align-items-center">
-            <div class="col-12">
-                <div class="d-flex gap-3 justify-content-center">
-                    <a href="{{ url_for('auth.register') }}" class="btn btn-primary btn-lg">Create Account</a>
-                    <a href="{{ url_for('shop.index') }}" class="btn btn-outline-primary btn-lg">Browse Shops</a>
-                </div>
-            </div>
-        </div>
-    </div>
-</section>
 
 <!-- Features Section -->
 <section class="features py-5">
@@ -106,6 +98,26 @@
 {% block scripts %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    // Clock functionality
+    function updateClock() {
+        const timeElement = document.getElementById('time');
+        const dateElement = document.getElementById('date');
+        const now = new Date();
+        const hours = String(now.getHours()).padStart(2, '0');
+        const minutes = String(now.getMinutes()).padStart(2, '0');
+        const seconds = String(now.getSeconds()).padStart(2, '0');
+        const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        const day = days[now.getDay()];
+        const date = now.toLocaleDateString();
+        const timeString = `${hours}:${minutes}:${seconds}`;
+        const dateString = `${day}, ${date}`;
+        timeElement.textContent = timeString;
+        dateElement.textContent = dateString;
+    }
+
+    setInterval(updateClock, 1000);
+    updateClock();
+
     // Banner dots functionality
     const dots = document.querySelectorAll('.banner-dot');
     dots.forEach((dot, index) => {

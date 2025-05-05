@@ -10,11 +10,13 @@ from ..utils.notifications import notify_customer_order_status, notify_admin_ord
 from ..utils.ai.negotiation_bot import process_negotiation
 from datetime import datetime
 from .. import db
+from ..routes.auth import customer_required
 
 user_bp = Blueprint('user', __name__, url_prefix='/user')
 
 @user_bp.route('/dashboard')
 @login_required
+@customer_required
 def dashboard():
     # Get active orders
     active_orders = Order.query.filter(
@@ -72,6 +74,7 @@ def dashboard():
 
 @user_bp.route('/orders')
 @login_required
+@customer_required
 def orders():
     # Get search and filter parameters
     search_query = request.args.get('q', '')
@@ -117,6 +120,7 @@ def orders():
 
 @user_bp.route('/order/<int:order_id>')
 @login_required
+@customer_required
 def order_detail(order_id):
     order = Order.query.get_or_404(order_id)
     if order.customer_id != current_user.id:
@@ -126,6 +130,7 @@ def order_detail(order_id):
 
 @user_bp.route('/track-order/<int:order_id>')
 @login_required
+@customer_required
 def track_order(order_id):
     order = Order.query.get_or_404(order_id)
     if order.customer_id != current_user.id:
