@@ -372,65 +372,31 @@ document.getElementById('confirmAddToCart').addEventListener('click', function()
     .then(response => response.json())
     .then(data => {
         if (data.status === 'success') {
-            // Update cart count
+            // Update cart count in navbar
             const cartCountElement = document.getElementById('cartCount');
             if (cartCountElement) {
-                cartCountElement.textContent = data.cart_count;
+                const currentCount = parseInt(cartCountElement.textContent || '0');
+                const newCount = currentCount + quantity;
+                cartCountElement.textContent = newCount;
+                cartCountElement.style.display = 'inline';
             }
+            
+            // Show success toast
+            const toast = new bootstrap.Toast(document.getElementById('addToCartToast'));
+            document.querySelector('#addToCartToast .toast-body').textContent = 'Item added to cart successfully!';
+            toast.show();
             
             // Close modal
             bootstrap.Modal.getInstance(document.getElementById('addToCartModal')).hide();
-            
-            // Show success toast
-            const toastElement = document.getElementById('addToCartToast');
-            const toastHeader = toastElement.querySelector('.toast-header');
-            const toastBody = toastElement.querySelector('.toast-body');
-            const toastIcon = toastHeader.querySelector('i');
-            
-            toastBody.textContent = data.message || 'Item added to cart successfully!';
-            toastHeader.classList.remove('bg-danger');
-            toastHeader.classList.add('bg-success');
-            toastIcon.className = 'bi bi-check-circle me-2';
-            
-            const toast = new bootstrap.Toast(toastElement);
-            toast.show();
-            
-            // Reset form
-            document.getElementById('cartQuantity').value = '1';
         } else {
-            // Show error toast
-            const toastElement = document.getElementById('addToCartToast');
-            const toastHeader = toastElement.querySelector('.toast-header');
-            const toastBody = toastElement.querySelector('.toast-body');
-            const toastIcon = toastHeader.querySelector('i');
-            
-            toastBody.textContent = data.message || 'Error adding item to cart';
-            toastHeader.classList.remove('bg-success');
-            toastHeader.classList.add('bg-danger');
-            toastIcon.className = 'bi bi-x-circle me-2';
-            
-            const toast = new bootstrap.Toast(toastElement);
-            toast.show();
+            throw new Error(data.message || 'Failed to add item to cart');
         }
     })
     .catch(error => {
         console.error('Error:', error);
-        // Show error toast
-        const toastElement = document.getElementById('addToCartToast');
-        const toastHeader = toastElement.querySelector('.toast-header');
-        const toastBody = toastElement.querySelector('.toast-body');
-        const toastIcon = toastHeader.querySelector('i');
-        
-        toastBody.textContent = 'Error adding product to cart. Please try again.';
-        toastHeader.classList.remove('bg-success');
-        toastHeader.classList.add('bg-danger');
-        toastIcon.className = 'bi bi-x-circle me-2';
-        
-        const toast = new bootstrap.Toast(toastElement);
-        toast.show();
+        alert(error.message || 'Error adding item to cart');
     })
     .finally(() => {
-        // Re-enable button
         button.disabled = false;
     });
 });
@@ -565,12 +531,68 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(response => response.json())
         .then(data => {
             if (data.status === 'success') {
-                // Update cart count in navbar
-                const cartCountElement = document.getElementById('cartCount');
-                if (cartCountElement) {
-                    cartCountElement.textContent = data.cart_count;
-                    cartCountElement.style.display = 'inline';
-                }
+                updateCartCount(quantity);
+                
+                // Show success toast
+                const toast = new bootstrap.Toast(document.getElementById('addToCartToast'));
+                document.querySelector('#addToCartToast .toast-body').textContent = 'Item added to cart successfully!';
+                toast.show();
+                
+                // Close modal
+                bootstrap.Modal.getInstance(document.getElementById('addToCartModal')).hide();
+            } else {
+                throw new Error(data.message || 'Failed to add item to cart');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert(error.message || 'Error adding item to cart');
+        })
+        .finally(() => {
+            button.disabled = false;
+        });
+    });
+});
+
+function updateCartCount(change = 0) {
+    const cartCountElement = document.getElementById('cartCount');
+    if (cartCountElement) {
+        const currentCount = parseInt(cartCountElement.textContent || '0');
+        const newCount = currentCount + change;
+        cartCountElement.textContent = newCount;
+        cartCountElement.style.display = newCount > 0 ? 'inline' : 'none';
+    }
+}
+
+// Initialize add to cart buttons
+document.addEventListener('DOMContentLoaded', function() {
+    // Handle add to cart confirmation
+    document.getElementById('confirmAddToCart').addEventListener('click', function() {
+        const productId = document.getElementById('cartProductId').value;
+        const quantity = parseInt(document.getElementById('cartQuantity').value);
+        
+        if (!productId || isNaN(quantity) || quantity < 1) {
+            alert('Please enter a valid quantity');
+            return;
+        }
+        
+        const button = this;
+        button.disabled = true;
+        
+        fetch('/api/add', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                product_id: productId,
+                quantity: quantity
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                updateCartCount(quantity);
                 
                 // Show success toast
                 const toast = new bootstrap.Toast(document.getElementById('addToCartToast'));

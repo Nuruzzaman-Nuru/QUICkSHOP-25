@@ -427,19 +427,22 @@ function updateQuantity(productId, newQuantity) {
     .then(data => {
         if (data.status === 'success') {
             updateCart();
-            updateCartCount();
-            // Recalculate shipping after quantity update
+            // Update cart badge with new total quantity
+            const cartCountEl = document.getElementById('cartCount');
+            if (cartCountEl) {
+                cartCountEl.textContent = data.cart_count;
+                cartCountEl.style.display = data.cart_count > 0 ? 'inline' : 'none';
+            }
             updateOrderSummary();
         } else {
             alert(data.message || 'Error updating quantity');
-            // Revert the UI to previous state
             updateCart();
         }
     })
     .catch(error => {
         console.error('Error:', error);
         alert('Error updating quantity');
-        updateCart(); // Revert UI on error
+        updateCart();
     });
 }
 
@@ -461,7 +464,12 @@ function removeFromCart(productId) {
     .then(data => {
         if (data.status === 'success') {
             updateCart();
-            updateCartCount();
+            // Update cart badge with new total quantity
+            const cartCountEl = document.getElementById('cartCount');
+            if (cartCountEl) {
+                cartCountEl.textContent = data.cart_count;
+                cartCountEl.style.display = data.cart_count > 0 ? 'inline' : 'none';
+            }
             updateOrderSummary();
         } else {
             alert(data.message || 'Error removing item');
@@ -626,6 +634,18 @@ document.addEventListener('DOMContentLoaded', function() {
     updateCart();
     initializeAddressForm();
     loadShippingAddress();
+    fetch('/api/cart/count')
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                const cartCountEl = document.getElementById('cartCount');
+                if (cartCountEl) {
+                    cartCountEl.textContent = data.count;
+                    cartCountEl.style.display = data.count > 0 ? 'inline' : 'none';
+                }
+            }
+        })
+        .catch(error => console.error('Error updating cart count:', error));
 });
 </script>
 {% endblock %}

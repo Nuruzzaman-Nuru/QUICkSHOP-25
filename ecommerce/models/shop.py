@@ -97,6 +97,10 @@ class Product(db.Model):
         discount = (self.price - offered_price) / self.price * 100
         return offered_price >= self.min_price and discount <= self.max_discount_percentage
 
+    def allow_continue_iteration(self):
+        """Check if further negotiation rounds are allowed after counter-offer"""
+        return self.continue_iteration
+
     def update_stock(self, quantity_change):
         """Update product stock, return True if successful"""
         new_stock = self.stock + quantity_change
@@ -120,5 +124,6 @@ class Product(db.Model):
             'is_negotiable': self.is_negotiable(),
             'min_price': self.min_price if self.is_negotiable() else None,
             'max_discount': self.max_discount_percentage if self.is_negotiable() else None,
+            'continue_iteration': self.continue_iteration,
             'created_at': self.created_at.isoformat()
         }

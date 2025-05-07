@@ -500,39 +500,31 @@ def edit_product(product_id):
 def update_negotiation_settings(product_id):
     product = Product.query.get_or_404(product_id)
     
-    # Ensure the product belongs to the current user's shop
+    # Verify shop ownership
     if product.shop.owner_id != current_user.id:
-        return jsonify({
-            'status': 'error',
-            'message': 'Access denied. You do not own this product.'
-        }), 403
-        
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
+    
+    # Get form data
+    min_price = request.form.get('min_price', type=float)
+    max_discount = request.form.get('max_discount', type=float)
+    continue_iteration = request.form.get('continue_iteration') == 'on'
+    
+    # Update settings
+    product.min_price = min_price
+    product.max_discount_percentage = max_discount
+    product.continue_iteration = continue_iteration
+    
     try:
-        min_price = request.form.get('min_price', '').strip()
-        max_discount = float(request.form.get('max_discount', 20))
-        
-        # Set min_price to None if empty (disables negotiation)
-        product.min_price = float(min_price) if min_price else None
-        product.max_discount_percentage = max(0, min(max_discount, 100))  # Clamp between 0-100
-        
         db.session.commit()
-        
         return jsonify({
             'status': 'success',
             'message': 'Negotiation settings updated successfully'
         })
-        
-    except ValueError:
-        return jsonify({
-            'status': 'error',
-            'message': 'Invalid value provided for price or discount'
-        }), 400
-        
     except Exception as e:
         db.session.rollback()
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': 'Error updating settings'
         }), 500
 
 @shop_bp.route('/shop/<int:shop_id>/about')

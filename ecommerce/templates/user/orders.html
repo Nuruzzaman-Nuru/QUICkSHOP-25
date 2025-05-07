@@ -4,143 +4,160 @@
 
 {% block content %}
 <div class="container mt-4">
-    <h2>My Orders</h2>
+    <h2>Orders</h2>
+
+    <!-- Status Tabs -->
+    <div class="mb-4">
+        <div class="nav nav-tabs">
+            <a class="nav-link {{ 'active' if not current_status }}" href="{{ url_for('user.orders') }}">
+                All ({{ status_counts['all'] }})
+            </a>
+            <a class="nav-link {{ 'active' if current_status == 'pending' }}" href="{{ url_for('user.orders', status='pending') }}">
+                Pending ({{ status_counts['pending'] }})
+            </a>
+            <a class="nav-link {{ 'active' if current_status == 'confirmed' }}" href="{{ url_for('user.orders', status='confirmed') }}">
+                Confirmed ({{ status_counts['confirmed'] }})
+            </a>
+            <a class="nav-link {{ 'active' if current_status == 'delivering' }}" href="{{ url_for('user.orders', status='delivering') }}">
+                Delivering ({{ status_counts['delivering'] }})
+            </a>
+            <a class="nav-link {{ 'active' if current_status == 'completed' }}" href="{{ url_for('user.orders', status='completed') }}">
+                Completed ({{ status_counts['completed'] }})
+            </a>
+            <a class="nav-link {{ 'active' if current_status == 'cancelled' }}" href="{{ url_for('user.orders', status='cancelled') }}">
+                Cancelled ({{ status_counts['cancelled'] }})
+            </a>
+        </div>
+    </div>
 
     <!-- Search and Filters -->
     <div class="card mb-4">
         <div class="card-body">
-            <form class="row g-3" method="GET">
-                <div class="col-md-5">
+            <form class="row g-3" method="GET" action="{{ url_for('user.orders') }}">
+                <div class="col-md-4">
                     <label class="form-label">Search Orders</label>
                     <input type="text" class="form-control" name="q" 
-                           value="{{ request.args.get('q', '') }}"
-                           placeholder="Search by order ID, shop name, or product...">
-                </div>
-                <div class="col-md-3">
-                    <label class="form-label">Status</label>
-                    <select class="form-select" name="status">
-                        <option value="">All Statuses</option>
-                        <option value="pending" {% if request.args.get('status') == 'pending' %}selected{% endif %}>Pending</option>
-                        <option value="confirmed" {% if request.args.get('status') == 'confirmed' %}selected{% endif %}>Confirmed</option>
-                        <option value="delivering" {% if request.args.get('status') == 'delivering' %}selected{% endif %}>Delivering</option>
-                        <option value="completed" {% if request.args.get('status') == 'completed' %}selected{% endif %}>Completed</option>
-                        <option value="cancelled" {% if request.args.get('status') == 'cancelled' %}selected{% endif %}>Cancelled</option>
-                    </select>
+                           value="{{ search_query }}"
+                           placeholder="Search by order ID, shop, or product...">
                 </div>
                 <div class="col-md-3">
                     <label class="form-label">Sort By</label>
                     <select class="form-select" name="sort">
-                        <option value="newest" {% if request.args.get('sort') == 'newest' %}selected{% endif %}>Newest First</option>
-                        <option value="oldest" {% if request.args.get('sort') == 'oldest' %}selected{% endif %}>Oldest First</option>
-                        <option value="highest" {% if request.args.get('sort') == 'highest' %}selected{% endif %}>Highest Amount</option>
-                        <option value="lowest" {% if request.args.get('sort') == 'lowest' %}selected{% endif %}>Lowest Amount</option>
+                        <option value="newest" {% if current_sort == 'newest' %}selected{% endif %}>Newest First</option>
+                        <option value="oldest" {% if current_sort == 'oldest' %}selected{% endif %}>Oldest First</option>
+                        <option value="highest" {% if current_sort == 'highest' %}selected{% endif %}>Highest Amount</option>
+                        <option value="lowest" {% if current_sort == 'lowest' %}selected{% endif %}>Lowest Amount</option>
                     </select>
                 </div>
-                <div class="col-md-1 d-flex align-items-end">
+                {% if current_status %}
+                <input type="hidden" name="status" value="{{ current_status }}">
+                {% endif %}
+                <div class="col-md-2 d-flex align-items-end">
                     <button type="submit" class="btn btn-primary w-100">
-                        <i class="bi bi-search"></i>
+                        <i class="bi bi-search"></i> Search
                     </button>
                 </div>
+                {% if search_query or current_sort != 'newest' %}
+                <div class="col-md-2 d-flex align-items-end">
+                    <a href="{{ url_for('user.orders', status=current_status) }}" class="btn btn-outline-secondary w-100">
+                        <i class="bi bi-x-circle"></i> Clear Filters
+                    </a>
+                </div>
+                {% endif %}
             </form>
         </div>
     </div>
 
     <!-- Orders List -->
-    {% if orders %}
-        <div class="row">
-            {% for order in orders %}
-                <div class="col-md-6 mb-4">
-                    <div class="card h-100">
-                        <div class="card-header d-flex justify-content-between align-items-center">
-                            <h5 class="mb-0">Order #{{ order.id }}</h5>
-                            <span class="badge bg-{{ {
-                                'pending': 'warning',
-                                'confirmed': 'info',
-                                'delivering': 'primary',
-                                'completed': 'success',
-                                'cancelled': 'danger'
-                            }[order.status] }}">
-                                {{ order.status|title }}
-                            </span>
-                        </div>
-                        <div class="card-body">
-                            <div class="mb-3">
-                                <strong>Shop:</strong> {{ order.shop.name }}
-                            </div>
-                            <div class="mb-3">
-                                <strong>Items:</strong>
-                                <ul class="list-unstyled">
-                                    {% for item in order.items %}
-                                        <li>
-                                            {{ item.product.name }} x {{ item.quantity }}
-                                            <span class="text-primary">৳{{ "%.2f"|format(item.price * item.quantity) }}</span>
-                                        </li>
-                                    {% endfor %}
-                                </ul>
-                            </div>
-                            <div class="mb-3">
-                                <strong>Delivery Address:</strong><br>
-                                {{ order.delivery_address }}
-                            </div>
-                            <div class="d-flex justify-content-between align-items-center">
-                                <div>
-                                    <strong>Total:</strong>
-                                    <span class="text-primary h5 mb-0">৳{{ "%.2f"|format(order.total_amount) }}</span>
-                                </div>
-                                <small class="text-muted">{{ order.created_at.strftime('%Y-%m-%d %H:%M') }}</small>
-                            </div>
-                        </div>
-                        <div class="card-footer bg-transparent border-top-0">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <a href="{{ url_for('user.order_detail', order_id=order.id) }}" 
-                                   class="btn btn-primary">View Details</a>
-                                {% if order.status == 'delivering' %}
-                                    <a href="{{ url_for('user.track_order', order_id=order.id) }}" 
-                                       class="btn btn-info">Track Order</a>
-                                {% endif %}
-                            </div>
-                        </div>
-                    </div>
+    <div class="card">
+        <div class="card-body">
+            {% if orders %}
+                <div class="table-responsive">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Order ID</th>
+                                <th>Shop</th>
+                                <th>Items</th>
+                                <th>Total Amount</th>
+                                <th>Status</th>
+                                <th>Order Date</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for order in orders %}
+                                <tr>
+                                    <td>#{{ order.id }}</td>
+                                    <td>{{ order.shop.name }}</td>
+                                    <td>{{ order.items|length }} items</td>
+                                    <td>৳{{ "%.2f"|format(order.total_amount) }}</td>
+                                    <td>
+                                        <span class="badge bg-{{ {
+                                            'pending': 'warning',
+                                            'confirmed': 'info',
+                                            'delivering': 'primary',
+                                            'completed': 'success',
+                                            'cancelled': 'danger'
+                                        }[order.status] }}">
+                                            {{ order.status|title }}
+                                        </span>
+                                    </td>
+                                    <td>{{ order.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                                    <td>
+                                        <div class="btn-group">
+                                            <a href="{{ url_for('user.order_detail', order_id=order.id) }}" 
+                                               class="btn btn-sm btn-outline-primary">
+                                                <i class="bi bi-eye"></i> View
+                                            </a>
+                                            {% if order.status in ['delivering', 'confirmed'] %}
+                                                <a href="{{ url_for('user.track_order', order_id=order.id) }}" 
+                                                   class="btn btn-sm btn-outline-info">
+                                                    <i class="bi bi-geo-alt"></i> Track
+                                                </a>
+                                            {% endif %}
+                                        </div>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
                 </div>
-            {% endfor %}
-        </div>
 
-        <!-- Pagination -->
-        {% if pagination.pages > 1 %}
-            <nav class="mt-4">
-                <ul class="pagination justify-content-center">
-                    {% for page in range(1, pagination.pages + 1) %}
-                        <li class="page-item {{ 'active' if page == pagination.page else '' }}">
-                            <a class="page-link" href="{{ url_for('user.orders', page=page, **request.args) }}">
-                                {{ page }}
-                            </a>
-                        </li>
-                    {% endfor %}
-                </ul>
-            </nav>
-        {% endif %}
-    {% else %}
-        <div class="text-center py-5">
-            <h4>No orders found</h4>
-            <p class="text-muted">You haven't placed any orders yet.</p>
-            <a href="{{ url_for('shop.index') }}" class="btn btn-primary">Browse Shops</a>
+                <!-- Pagination -->
+                {% if pagination.pages > 1 %}
+                    <nav class="mt-4">
+                        <ul class="pagination justify-content-center">
+                            {% if pagination.has_prev %}
+                                <li class="page-item">
+                                    <a class="page-link" href="{{ url_for('user.orders', page=pagination.prev_num, q=search_query, status=current_status, sort=current_sort) }}">Previous</a>
+                                </li>
+                            {% endif %}
+                            
+                            {% for page in pagination.iter_pages() %}
+                                {% if page %}
+                                    <li class="page-item {{ 'active' if page == pagination.page else '' }}">
+                                        <a class="page-link" href="{{ url_for('user.orders', page=page, q=search_query, status=current_status, sort=current_sort) }}">{{ page }}</a>
+                                    </li>
+                                {% else %}
+                                    <li class="page-item disabled"><span class="page-link">...</span></li>
+                                {% endif %}
+                            {% endfor %}
+                            
+                            {% if pagination.has_next %}
+                                <li class="page-item">
+                                    <a class="page-link" href="{{ url_for('user.orders', page=pagination.next_num, q=search_query, status=current_status, sort=current_sort) }}">Next</a>
+                                </li>
+                            {% endif %}
+                        </ul>
+                    </nav>
+                {% endif %}
+            {% else %}
+                <div class="text-center py-4">
+                    <p class="text-muted mb-0">No orders found matching your criteria.</p>
+                </div>
+            {% endif %}
         </div>
-    {% endif %}
+    </div>
 </div>
-{% endblock %}
-
-{% block scripts %}
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    // Auto-submit form when sort or status changes
-    ['sort', 'status'].forEach(field => {
-        const select = document.querySelector(`select[name="${field}"]`);
-        if (select) {
-            select.addEventListener('change', function() {
-                this.form.submit();
-            });
-        }
-    });
-});
-</script>
 {% endblock %}

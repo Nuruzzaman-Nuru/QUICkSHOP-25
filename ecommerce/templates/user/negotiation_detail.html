@@ -203,6 +203,7 @@
             <div class="modal-body">
                 <p>Are you sure you want to accept the counter offer of 
                    <strong>৳<span id="counterPrice"></span></strong>?</p>
+                <p class="text-success">After accepting, the item will be automatically added to your cart.</p>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -302,20 +303,42 @@
     });
     
     document.getElementById('confirmAccept')?.addEventListener('click', function() {
-        fetch(`/user/negotiation/${negotiationId}/accept`, {
+        this.disabled = true;
+        
+        fetch(`/api/negotiation/${negotiationId}/accept`, {
             method: 'POST'
         })
         .then(response => response.json())
         .then(data => {
             if (data.status === 'success') {
-                location.reload();
+                // Show success message
+                const modalBody = document.querySelector('#acceptCounterModal .modal-body');
+                modalBody.innerHTML = `
+                    <div class="alert alert-success">
+                        <h6 class="alert-heading">Offer Accepted!</h6>
+                        <p>The item has been added to your cart at the negotiated price.</p>
+                    </div>`;
+                
+                // Change footer button to "Go to Cart"
+                const footer = document.querySelector('#acceptCounterModal .modal-footer');
+                footer.innerHTML = `
+                    <button type="button" class="btn btn-primary" onclick="window.location.href='/cart'">
+                        Go to Cart
+                    </button>`;
+                
+                // Reload page after a short delay
+                setTimeout(() => {
+                    window.location.reload();
+                }, 2000);
             } else {
-                alert(data.message);
+                alert(data.message || 'Error accepting offer');
+                this.disabled = false;
             }
         })
         .catch(error => {
             console.error('Error:', error);
             alert('Error accepting counter offer');
+            this.disabled = false;
         });
     });
 })();

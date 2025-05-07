@@ -1,0 +1,9 @@
+<!-- Customer Navigation -->
+<li class="nav-item">
+    <a class="nav-link" href="{{ url_for('main.cart') }}">
+        <i class="bi bi-cart"></i> Cart
+        <span id="cartCount" class="badge rounded-pill bg-danger" style="display: {% if current_user.is_authenticated and current_user.cart_items %} inline {% else %} none {% endif %}">
+            {{ current_user.cart_items|length if current_user.is_authenticated else 0 }}
+        </span>
+    </a>
+</li>

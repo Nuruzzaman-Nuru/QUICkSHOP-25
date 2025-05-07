@@ -4,6 +4,7 @@ from ..models.user import User
 from ..models.shop import Shop, Product
 from ..models.order import Order, OrderItem
 from ..models.negotiation import Negotiation, DeliveryNegotiation
+from ..models.cart import Cart, CartItem  # Add this line
 from ..utils.ai.negotiation_bot import create_negotiation_session, create_delivery_negotiation_session, process_delivery_negotiation
 from ..utils.notifications import (
     notify_shop_owner_new_order,
@@ -604,12 +605,37 @@ def accept_negotiation(negotiation_id):
     
     # Accept the last counter offer
     if negotiation.counter_price:
+        # Update negotiation status
         negotiation.accept_offer(negotiation.counter_price)
+        
+        # Add item to cart with negotiated price
+        cart = Cart.query.filter_by(user_id=current_user.id).first()
+        if not cart:
+            cart = Cart(user_id=current_user.id)
+            db.session.add(cart)
+        
+        # Check if product already in cart
+        cart_item = CartItem.query.filter_by(
+            cart_id=cart.id,
+            product_id=negotiation.product_id
+        ).first()
+        
+        if cart_item:
+            cart_item.negotiated_price = negotiation.final_price
+        else:
+            cart_item = CartItem(
+                cart_id=cart.id,
+                product_id=negotiation.product_id,
+                quantity=1,
+                negotiated_price=negotiation.final_price
+            )
+            db.session.add(cart_item)
+        
         db.session.commit()
         
         return jsonify({
             'status': 'success',
-            'message': 'Negotiation accepted',
+            'message': 'Negotiation accepted and item added to cart',
             'final_price': negotiation.final_price
         })
     else:

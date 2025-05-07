@@ -70,6 +70,16 @@ def orders():
             )
         ).distinct()
     
+    # Get counts for status tabs before applying status filter
+    status_counts = {
+        'all': query.count(),
+        'pending': query.filter(Order.status == 'pending').count(),
+        'confirmed': query.filter(Order.status == 'confirmed').count(),
+        'delivering': query.filter(Order.status == 'delivering').count(),
+        'completed': query.filter(Order.status == 'completed').count(),
+        'cancelled': query.filter(Order.status == 'cancelled').count()
+    }
+    
     # Apply status filter
     if status:
         query = query.filter_by(status=status)
@@ -90,7 +100,11 @@ def orders():
     
     return render_template('user/orders.html', 
                          orders=orders,
-                         pagination=pagination)
+                         pagination=pagination,
+                         status_counts=status_counts,
+                         current_status=status,
+                         current_sort=sort,
+                         search_query=search_query)
 
 @user_bp.route('/order/<int:order_id>')
 @login_required
