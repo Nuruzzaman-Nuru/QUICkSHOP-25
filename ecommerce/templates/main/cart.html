@@ -53,21 +53,34 @@
                 <div class="card-body">
                     <h5 class="card-title">Order Summary</h5>
                     <div class="d-flex justify-content-between mb-2">
-                        <span>Subtotal (0 items):</span>
-                        <span id="subtotal">৳0</span>
+                        <span>Subtotal:</span>
+                        <span id="subtotal">৳0.00</span>
                     </div>
                     <div class="d-flex justify-content-between mb-2">
                         <span>Shipping Fee:</span>
-                        <span id="shippingFee">৳0</span>
+                        <span id="shippingFee">৳0.00</span>
+                    </div>
+                    <div class="d-flex justify-content-between mb-3">
+                        <span>Tax:</span>
+                        <span id="tax">৳0.00</span>
                     </div>
 
-                    <div class="d-flex justify-content-between border-top pt-2">
-                        <strong>Total:</strong>
-                        <strong id="total">৳0</strong>
+                    <!-- Voucher Section -->
+                    <div class="mb-3">
+                        <div class="input-group">
+                            <input type="text" class="form-control" id="voucherCode" placeholder="Enter voucher code">
+                            <button class="btn btn-outline-primary" type="button" onclick="applyVoucher()">Apply</button>
+                        </div>
+                        <div id="voucherMessage" class="form-text"></div>
                     </div>
-                    
-                    <div class="d-grid gap-2 mt-4">
-                        <button class="btn btn-primary" id="checkoutBtn" disabled>
+
+                    <div class="d-flex justify-content-between border-top pt-2 mb-3">
+                        <strong>Total:</strong>
+                        <strong id="total">৳0.00</strong>
+                    </div>
+
+                    <div class="d-grid">
+                        <button id="checkoutBtn" class="btn btn-primary" onclick="proceedToCheckout()" disabled>
                             PROCEED TO CHECKOUT (0)
                         </button>
                     </div>
@@ -86,6 +99,7 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
+                <div id="map" style="height: 300px; margin-bottom: 20px;"></div>
                 <form id="addressForm">
                     <div class="mb-3">
                         <label class="form-label">Street Address</label>
@@ -276,6 +290,7 @@ function initializeShopCheckboxes() {
 function updateOrderSummary() {
     const selectedItems = document.querySelectorAll('.item-checkbox:checked');
     let subtotal = 0;
+    let selectedProducts = [];
     
     selectedItems.forEach(checkbox => {
         const itemId = checkbox.dataset.itemId;
@@ -286,20 +301,102 @@ function updateOrderSummary() {
             const price = parseFloat(priceEl.textContent.replace('৳', ''));
             const quantity = parseInt(quantityEl.value);
             subtotal += price * quantity;
+            selectedProducts.push(itemId);
         }
     });
-    
-    const shippingFee = selectedItems.length > 0 ? 5.00 : 0;
-    const total = subtotal + shippingFee;
-    
-    document.getElementById('subtotal').textContent = formatPrice(subtotal);
-    document.getElementById('shippingFee').textContent = formatPrice(shippingFee);
-    document.getElementById('total').textContent = formatPrice(total);
-    
-    const checkoutBtn = document.getElementById('checkoutBtn');
-    checkoutBtn.textContent = `PROCEED TO CHECKOUT (${selectedItems.length})`;
-    checkoutBtn.disabled = selectedItems.length === 0;
+
+    // Get shipping address and calculate shipping fee
+    fetch('/api/cart/shipping-address')
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success' && data.lat && data.lng && selectedItems.length > 0) {
+                return fetch('/api/calculate-shipping', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        lat: data.lat,
+                        lng: data.lng
+                    })
+                });
+            }
+            return Promise.resolve({ json: () => ({ shipping_fee: 0 }) });
+        })
+        .then(response => response.json())
+        .then(data => {
+            const shippingFee = selectedItems.length > 0 ? (data.shipping_fee || 5.00) : 0;
+            const total = subtotal + shippingFee;
+            
+            document.getElementById('subtotal').textContent = formatPrice(subtotal);
+            document.getElementById('shippingFee').textContent = formatPrice(shippingFee);
+            document.getElementById('total').textContent = formatPrice(total);
+            
+            const checkoutBtn = document.getElementById('checkoutBtn');
+            checkoutBtn.textContent = `PROCEED TO CHECKOUT (${selectedItems.length})`;
+            checkoutBtn.disabled = selectedItems.length === 0;
+            
+            // Store selected items for checkout
+            sessionStorage.setItem('selectedProducts', JSON.stringify(selectedProducts));
+        })
+        .catch(error => {
+            console.error('Error calculating shipping:', error);
+            // Fall back to default shipping calculation
+            const shippingFee = selectedItems.length > 0 ? 5.00 : 0;
+            const total = subtotal + shippingFee;
+            
+            document.getElementById('subtotal').textContent = formatPrice(subtotal);
+            document.getElementById('shippingFee').textContent = formatPrice(shippingFee);
+            document.getElementById('total').textContent = formatPrice(total);
+        });
 }
+
+document.getElementById('checkoutBtn').addEventListener('click', function() {
+    const selectedProducts = JSON.parse(sessionStorage.getItem('selectedProducts') || '[]');
+    if (!selectedProducts.length) {
+        alert('Please select items to checkout');
+        return;
+    }
+    
+    // Get shipping address
+    fetch('/api/cart/shipping-address')
+        .then(response => response.json())
+        .then(data => {
+            if (!data.address) {
+                alert('Please select a delivery address');
+                return;
+            }
+            
+            // Process checkout
+            fetch('/api/checkout', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    selected_items: selectedProducts,
+                    special_instructions: ''
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    // Clear selected products
+                    sessionStorage.removeItem('selectedProducts');
+                    
+                    // Show success message and redirect to orders page
+                    alert('Order placed successfully!');
+                    window.location.href = '{{ url_for('user.orders') }}';
+                } else {
+                    alert(data.message || 'Error placing order');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error placing order');
+            });
+        });
+});
 
 function applyVoucher() {
     const code = document.getElementById('voucherCode').value;
@@ -331,14 +428,65 @@ function updateQuantity(productId, newQuantity) {
         if (data.status === 'success') {
             updateCart();
             updateCartCount();
+            // Recalculate shipping after quantity update
+            updateOrderSummary();
         } else {
-            alert(data.message);
+            alert(data.message || 'Error updating quantity');
+            // Revert the UI to previous state
+            updateCart();
         }
     })
     .catch(error => {
         console.error('Error:', error);
         alert('Error updating quantity');
+        updateCart(); // Revert UI on error
     });
+}
+
+function removeFromCart(productId) {
+    if (!confirm('Are you sure you want to remove this item?')) {
+        return;
+    }
+    
+    fetch('/api/remove', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            product_id: productId
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success') {
+            updateCart();
+            updateCartCount();
+            updateOrderSummary();
+        } else {
+            alert(data.message || 'Error removing item');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error removing item');
+    });
+}
+
+// Update cart count in the navbar
+function updateCartCount() {
+    fetch('/api/cart/count')
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                const cartCountEl = document.getElementById('cartCount');
+                if (cartCountEl) {
+                    cartCountEl.textContent = data.count;
+                    cartCountEl.style.display = data.count > 0 ? 'inline' : 'none';
+                }
+            }
+        })
+        .catch(error => console.error('Error updating cart count:', error));
 }
 
 function selectAll() {
@@ -379,10 +527,6 @@ function selectAll() {
         alert('Error deleting items');
     });
 }
-
-document.getElementById('checkoutBtn').addEventListener('click', function() {
-    window.location.href = '{{ url_for('main.checkout') }}';
-});
 
 function initializeAddressForm() {
     const streetInput = document.getElementById('street');

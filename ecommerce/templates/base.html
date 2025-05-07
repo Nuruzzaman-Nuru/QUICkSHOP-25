@@ -27,8 +27,19 @@
             </button>
             
             <div class="collapse navbar-collapse" id="navbarNav">
-                <!-- Common Navigation Items -->
                 <ul class="navbar-nav me-auto">
+                    {% if not current_user.is_authenticated %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('main.index') }}">
+                            <i class="bi bi-house-door"></i> Home
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('main.about') }}">
+                            <i class="bi bi-info-circle"></i> About QuickShop
+                        </a>
+                    </li>
+                    {% elif current_user.is_authenticated and current_user.role == 'customer' %}
                     <li class="nav-item">
                         <a class="nav-link" href="{{ url_for('main.index') }}">
                             <i class="bi bi-house-door"></i> Home
@@ -39,11 +50,30 @@
                             <i class="bi bi-bag"></i> Shop
                         </a>
                     </li>
+                    {% elif current_user.is_authenticated and current_user.role == 'shop_owner' %}
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('main.about') }}">
-                            <i class="bi bi-info-circle"></i> About Us
+                        <a class="nav-link" href="{{ url_for('shop.dashboard') }}">
+                            <i class="bi bi-speedometer2"></i> Dashboard
                         </a>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('shop.manage') }}">
+                            <i class="bi bi-grid"></i> Products
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('shop.orders') }}">
+                            <i class="bi bi-box-seam"></i> Orders
+                        </a>
+                    </li>
+                    {% if current_user.shop %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('shop.about', shop_id=current_user.shop.id) }}">
+                            <i class="bi bi-shop"></i> My Shop
+                        </a>
+                    </li>
+                    {% endif %}
+                    {% endif %}
                     <li class="nav-item">
                         <a class="nav-link" href="{{ url_for('main.contact_page') }}">
                             <i class="bi bi-envelope"></i> Contact
@@ -79,22 +109,30 @@
 
                         {% elif current_user.role == 'shop_owner' %}
                         <!-- Shop Owner Navigation -->
-                        <li class="nav-item">
-                            <a class="nav-link" href="{{ url_for('shop.dashboard') }}">
-                                <i class="bi bi-speedometer2"></i> Shop Dashboard
-                            </a>
-                        </li>
                         <li class="nav-item dropdown">
                             <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
                                 <i class="bi bi-shop"></i> Shop Management
                             </a>
                             <ul class="dropdown-menu">
+                                <li><a class="dropdown-item" href="{{ url_for('shop.dashboard') }}">
+                                    <i class="bi bi-speedometer2"></i> Dashboard
+                                </a></li>
                                 <li><a class="dropdown-item" href="{{ url_for('shop.orders') }}">
                                     <i class="bi bi-box-seam"></i> Orders
                                 </a></li>
                                 <li><a class="dropdown-item" href="{{ url_for('shop.manage') }}">
                                     <i class="bi bi-grid"></i> Products
                                 </a></li>
+                                {% if current_user.shop %}
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item" href="{{ url_for('shop.about', shop_id=current_user.shop.id) }}">
+                                    <i class="bi bi-info-circle"></i> About Shop
+                                </a></li>
+                                <li><a class="dropdown-item" href="{{ url_for('shop.contact', shop_id=current_user.shop.id) }}">
+                                    <i class="bi bi-envelope"></i> Contact Info
+                                </a></li>
+                                {% endif %}
+                                <li><hr class="dropdown-divider"></li>
                                 <li><a class="dropdown-item" href="{{ url_for('shop.settings') }}">
                                     <i class="bi bi-gear"></i> Settings
                                 </a></li>
@@ -105,7 +143,7 @@
                         <!-- Delivery Person Navigation -->
                         <li class="nav-item">
                             <a class="nav-link" href="{{ url_for('delivery.dashboard') }}">
-                                <i class="bi bi-speedometer2"></i> Delivery Dashboard
+                                <i class="bi bi-speedometer2"></i> Dashboard
                             </a>
                         </li>
                         <li class="nav-item">
@@ -113,7 +151,21 @@
                                 <i class="bi bi-gear"></i> Settings
                             </a>
                         </li>
-
+                        <!-- Common User Profile Menu -->
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                                <i class="bi bi-person-circle"></i> {{ current_user.username }}
+                            </a>
+                            <ul class="dropdown-menu dropdown-menu-end">
+                                <li><a class="dropdown-item" href="{{ url_for('auth.profile') }}">
+                                    <i class="bi bi-person"></i> Profile
+                                </a></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item" href="{{ url_for('auth.logout') }}">
+                                    <i class="bi bi-box-arrow-right"></i> Logout
+                                </a></li>
+                            </ul>
+                        </li>
                         {% else %}
                         <!-- Customer Navigation -->
                         <li class="nav-item">

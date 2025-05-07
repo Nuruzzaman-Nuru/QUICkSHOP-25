@@ -34,6 +34,13 @@ def create_app(config_name='default'):
     
     app.jinja_env.filters['escapejs'] = escapejs
     
+    @app.template_filter('from_json')
+    def from_json_filter(value):
+        try:
+            return json.loads(value) if value else {}
+        except:
+            return {}
+    
     from .models.user import User
     @login_manager.user_loader
     def load_user(user_id):

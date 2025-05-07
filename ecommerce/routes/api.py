@@ -124,7 +124,7 @@ def dashboard_stats():
 @customer_required
 def add_to_cart():
     try:
-        cart = init_cart()
+        init_cart()
         data = request.get_json()
         
         if not data:
@@ -135,23 +135,22 @@ def add_to_cart():
 
         product_id = str(data.get('product_id'))
         quantity = int(data.get('quantity', 1))
-        negotiated_price = data.get('negotiated_price')
         
         # Validate product exists
         product = Product.query.get_or_404(product_id)
         
-        # Check if product is still available
+        # Validate product is in stock
         if not product.stock:
             return jsonify({
                 'status': 'error',
                 'message': 'Product is out of stock'
             }), 400
         
-        # Get current quantity in cart
-        current_quantity = cart.get(product_id, {}).get('quantity', 0)
+        # Calculate total quantity including what's already in cart
+        current_quantity = session['cart'].get(product_id, {}).get('quantity', 0)
         total_quantity = current_quantity + quantity
         
-        # Check if total requested quantity is available
+        # Validate stock availability
         if product.stock < total_quantity:
             return jsonify({
                 'status': 'error',
@@ -159,27 +158,24 @@ def add_to_cart():
             }), 400
             
         # Update or add cart item
-        cart[product_id] = {
+        session['cart'][product_id] = {
             'quantity': total_quantity,
-            'price': negotiated_price if negotiated_price else float(product.price),
-            'name': product.name
+            'price': float(product.price),
+            'name': product.name,
+            'shop_id': product.shop_id,
+            'shop_name': product.shop.name
         }
         session.modified = True
         
-        # Get updated cart count for UI update
-        total_count = sum(item['quantity'] for item in cart.values())
+        # Calculate total items in cart
+        cart_count = sum(item['quantity'] for item in session['cart'].values())
         
         return jsonify({
             'status': 'success',
             'message': 'Product added to cart',
-            'cart_count': total_count
+            'cart_count': cart_count
         })
         
-    except ValueError as e:
-        return jsonify({
-            'status': 'error',
-            'message': 'Invalid quantity specified'
-        }), 400
     except Exception as e:
         return jsonify({
             'status': 'error',
@@ -190,30 +186,41 @@ def add_to_cart():
 @login_required
 @customer_required
 def update_cart():
-    data = request.get_json()
-    product_id = str(data.get('product_id'))
-    quantity = int(data.get('quantity'))
-    
-    if quantity <= 0:
-        if product_id in session['cart']:
-            del session['cart'][product_id]
-    else:
-        product = Product.query.get_or_404(product_id)
-        if product.stock < quantity:
-            return jsonify({
-                'status': 'error',
-                'message': 'Not enough stock available'
-            }), 400
-            
-        if product_id in session['cart']:
-            session['cart'][product_id]['quantity'] = quantity
-    
-    session.modified = True
-    
-    return jsonify({
-        'status': 'success',
-        'message': 'Cart updated'
-    })
+    try:
+        data = request.get_json()
+        product_id = str(data.get('product_id'))
+        quantity = int(data.get('quantity', 0))
+        
+        if quantity <= 0:
+            if product_id in session['cart']:
+                del session['cart'][product_id]
+                session.modified = True
+        else:
+            product = Product.query.get_or_404(product_id)
+            if product.stock < quantity:
+                return jsonify({
+                    'status': 'error',
+                    'message': f'Only {product.stock} items available'
+                }), 400
+                
+            if product_id in session['cart']:
+                session['cart'][product_id]['quantity'] = quantity
+                session.modified = True
+        
+        cart_total = sum(item['quantity'] * item['price'] for item in session['cart'].values())
+        cart_count = sum(item['quantity'] for item in session['cart'].values())
+        
+        return jsonify({
+            'status': 'success',
+            'message': 'Cart updated',
+            'cart_total': cart_total,
+            'cart_count': cart_count
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
 
 @api_bp.route('/remove', methods=['POST'])
 @login_required
@@ -372,8 +379,10 @@ def get_cart_items():
             items.append({
                 'id': product_id,
                 'name': product.name,
+                'image_url': product.image_url,
                 'price': price,
                 'quantity': quantity,
+                'stock': product.stock,
                 'subtotal': subtotal,
                 'shop_id': product.shop_id,
                 'shop_name': product.shop.name
@@ -382,7 +391,8 @@ def get_cart_items():
     return jsonify({
         'status': 'success',
         'items': items,
-        'total': total
+        'total': total,
+        'count': sum(item['quantity'] for item in cart.values())
     })
 
 @api_bp.route('/cart/change', methods=['POST'])

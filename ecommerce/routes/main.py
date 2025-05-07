@@ -1,5 +1,5 @@
-from flask import Blueprint, render_template, session, send_from_directory, request, redirect, url_for, jsonify, current_app
-from flask_login import login_required
+from flask import Blueprint, render_template, session, send_from_directory, request, redirect, url_for, jsonify, current_app, flash
+from flask_login import login_required, current_user
 from sqlalchemy import or_, func, and_
 from ..models.shop import Shop, Product
 from .. import db
@@ -15,6 +15,15 @@ def index():
 
 @main_bp.route('/about')
 def about():
+    # Show default QuickShop about page for non-logged in users
+    # or users that are not shop owners
+    if not current_user.is_authenticated or current_user.role != 'shop_owner':
+        return render_template('main/about.html')
+    
+    # Redirect shop owners to their shop's about page
+    shop = Shop.query.filter_by(owner_id=current_user.id).first()
+    if shop:
+        return redirect(url_for('shop.about', shop_id=shop.id))
     return render_template('main/about.html')
 
 @main_bp.route('/projects')

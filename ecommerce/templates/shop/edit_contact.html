@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Contact Information - {{ shop.name }}{% endblock %}
+
+{% block content %}
+<div class="container my-4">
+    <div class="row">
+        <div class="col-md-8 offset-md-2">
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="mb-0">Edit Contact Information</h2>
+                </div>
+                <div class="card-body">
+                    <form method="POST">
+                        <div class="mb-3">
+                            <label for="phone" class="form-label">Phone Number</label>
+                            <input type="tel" class="form-control" id="phone" name="phone" value="{{ shop.phone or '' }}" placeholder="e.g., +1234567890">
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="email" class="form-label">Business Email</label>
+                            <input type="email" class="form-control" id="email" name="email" value="{{ shop.email or '' }}" placeholder="e.g., shop@example.com">
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="website" class="form-label">Website (optional)</label>
+                            <input type="url" class="form-control" id="website" name="website" value="{{ shop.website or '' }}" placeholder="e.g., https://www.yourshop.com">
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="business_hours" class="form-label">Business Hours</label>
+                            <div class="business-hours-inputs">
+                                {% set days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] %}
+                                {% for day in days %}
+                                <div class="row mb-2">
+                                    <div class="col-md-3">
+                                        <label class="form-check-label">
+                                            <input type="checkbox" class="form-check-input day-checkbox" data-day="{{ day.lower() }}"> {{ day }}
+                                        </label>
+                                    </div>
+                                    <div class="col-md-9">
+                                        <div class="row">
+                                            <div class="col-6">
+                                                <input type="time" class="form-control time-input" name="{{ day.lower() }}_open" disabled>
+                                            </div>
+                                            <div class="col-6">
+                                                <input type="time" class="form-control time-input" name="{{ day.lower() }}_close" disabled>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+
+                        <div class="d-flex justify-content-between">
+                            <a href="{{ url_for('shop.view', shop_id=shop.id) }}" class="btn btn-secondary">
+                                <i class="bi bi-x-circle"></i> Cancel
+                            </a>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-save"></i> Save Changes
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Handle business hours checkbox toggling
+    const dayCheckboxes = document.querySelectorAll('.day-checkbox');
+    dayCheckboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            const day = this.dataset.day;
+            const timeInputs = document.querySelectorAll(`[name^="${day}_"]`);
+            timeInputs.forEach(input => {
+                input.disabled = !this.checked;
+            });
+        });
+    });
+
+    // Load existing business hours if any
+    try {
+        const hours = {{ shop.business_hours|tojson|safe if shop.business_hours else '{}' }};
+        for (const [day, times] of Object.entries(hours)) {
+            const checkbox = document.querySelector(`[data-day="${day}"]`);
+            if (checkbox) {
+                checkbox.checked = true;
+                const openInput = document.querySelector(`[name="${day}_open"]`);
+                const closeInput = document.querySelector(`[name="${day}_close"]`);
+                if (openInput && closeInput) {
+                    openInput.disabled = false;
+                    closeInput.disabled = false;
+                    openInput.value = times.open;
+                    closeInput.value = times.close;
+                }
+            }
+        }
+    } catch (e) {
+        console.error('Error loading business hours:', e);
+    }
+});
+</script>
+{% endblock %}

@@ -5,10 +5,16 @@ class Shop(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     description = db.Column(db.Text)
+    about = db.Column(db.Text)  # New field for shop-specific About content
     owner_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     location_lat = db.Column(db.Float, nullable=False)
     location_lng = db.Column(db.Float, nullable=False)
     address = db.Column(db.String(200), nullable=False)
+    # Contact information fields
+    phone = db.Column(db.String(20))
+    email = db.Column(db.String(120))
+    website = db.Column(db.String(200))
+    business_hours = db.Column(db.Text)  # Stored as JSON string
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     is_active = db.Column(db.Boolean, default=True)
     
@@ -16,24 +22,36 @@ class Shop(db.Model):
     products = db.relationship('Product', backref='shop', lazy=True)
     orders = db.relationship('Order', backref='shop', lazy=True)
 
-    def __init__(self, name, description, owner_id, location_lat, location_lng, address):
+    def __init__(self, name, description, owner_id, location_lat, location_lng, address, about=None, phone=None, email=None, website=None, business_hours=None):
         self.name = name
         self.description = description
         self.owner_id = owner_id
         self.location_lat = location_lat
         self.location_lng = location_lng
         self.address = address
+        self.about = about
+        self.phone = phone
+        self.email = email
+        self.website = website
+        self.business_hours = business_hours
 
     def to_dict(self):
         return {
             'id': self.id,
             'name': self.name,
             'description': self.description,
+            'about': self.about,
             'owner_id': self.owner_id,
             'location': {
                 'lat': self.location_lat,
                 'lng': self.location_lng,
                 'address': self.address
+            },
+            'contact': {
+                'phone': self.phone,
+                'email': self.email,
+                'website': self.website,
+                'business_hours': self.business_hours
             },
             'created_at': self.created_at.isoformat(),
             'is_active': self.is_active

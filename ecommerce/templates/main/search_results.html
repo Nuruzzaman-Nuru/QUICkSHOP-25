@@ -35,7 +35,7 @@
             <form class="search-form" method="GET" action="{{ url_for('main.search') }}">
                 <div class="input-group">
                     <input type="text" class="form-control" name="q" value="{{ query }}" 
-                           placeholder="Search for shops or products...">
+                           placeholder="Search for shops, products or locations...">
                     <select class="form-select" name="type" style="max-width: 150px;">
                         <option value="all" {% if search_type == 'all' %}selected{% endif %}>All</option>
                         <option value="shops" {% if search_type == 'shops' %}selected{% endif %}>Shops Only</option>

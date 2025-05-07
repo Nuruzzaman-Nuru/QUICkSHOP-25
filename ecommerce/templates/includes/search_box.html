@@ -2,9 +2,9 @@
 <form class="search-form" action="{{ url_for('main.search') }}" method="GET">
     <div class="input-group search-container">
         <input class="form-control search-input" type="search" name="q" 
-               value="{{ request.args.get('q', '') }}"
-               placeholder="Search products, shops, categories..." 
-               aria-label="Search" autocomplete="off">
+                          placeholder="Search for shops, products, or locations..." 
+                          value="{{ request.args.get('q', '') }}"
+                          aria-label="Search" autocomplete="off">
         {% if search_type != 'all' %}
             <input type="hidden" name="type" value="{{ search_type }}">
         {% endif %}

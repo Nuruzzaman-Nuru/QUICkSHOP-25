@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify, current_app
+from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify, current_app, abort, json
 from flask_login import login_required, current_user
 from sqlalchemy import func, or_, desc, asc, String
 from functools import wraps
@@ -7,8 +7,14 @@ import os
 from ..models.shop import Shop, Product
 from ..models.user import User
 from ..models.order import Order
-from ..utils.notifications import notify_customer_order_status
+from ..utils.notifications import notify_customer_order_status, notify_admin_order_status, notify_delivery_person_new_order
 from .. import db
+
+# Define allowed file extensions
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 shop_bp = Blueprint('shop', __name__, url_prefix='/shop')
 
@@ -224,9 +230,14 @@ def update_order_status(order_id):
     try:
         if order.update_status(new_status):
             db.session.commit()
+            
             # Send notifications
             notify_customer_order_status(order)
-            notify_admin_order_status(order)
+            notify_admin_order_status(order, {
+                'old': order.status,
+                'new': new_status,
+                'action': 'status_update'
+            })
             
             if new_status == 'confirmed':
                 # Notify available delivery personnel
@@ -236,6 +247,7 @@ def update_order_status(order_id):
                 'status': 'success',
                 'message': f'Order status updated to {new_status}'
             })
+            
     except ValueError as e:
         return jsonify({
             'status': 'error',
@@ -522,3 +534,65 @@ def update_negotiation_settings(product_id):
             'status': 'error',
             'message': str(e)
         }), 500
+
+@shop_bp.route('/shop/<int:shop_id>/about')
+def about(shop_id):
+    shop = Shop.query.get_or_404(shop_id)
+    return render_template('shop/about.html', shop=shop)
+
+@shop_bp.route('/shop/<int:shop_id>/about/edit', methods=['GET', 'POST'])
+@login_required
+def edit_about(shop_id):
+    shop = Shop.query.get_or_404(shop_id)
+    if current_user.id != shop.owner_id:
+        abort(403)  # Forbidden if not the shop owner
+    
+    if request.method == 'POST':
+        shop.about = request.form.get('about')
+        db.session.commit()
+        flash('About section updated successfully', 'success')
+        return redirect(url_for('shop.about', shop_id=shop.id))
+    
+    return render_template('shop/edit_about.html', 
+                         shop=shop,
+                         config={'TINYMCE_API_KEY': current_app.config['TINYMCE_API_KEY']})
+
+@shop_bp.route('/shop/<int:shop_id>/contact')
+def contact(shop_id):
+    shop = Shop.query.get_or_404(shop_id)
+    return render_template('shop/contact.html', shop=shop)
+
+@shop_bp.route('/shop/<int:shop_id>/contact/edit', methods=['GET', 'POST'])
+@login_required
+def edit_contact(shop_id):
+    shop = Shop.query.get_or_404(shop_id)
+    if current_user.id != shop.owner_id:
+        abort(403)  # Forbidden if not the shop owner
+    
+    if request.method == 'POST':
+        # Collect business hours data
+        business_hours = {}
+        days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+        for day in days:
+            if request.form.get(f'{day}_open') and request.form.get(f'{day}_close'):
+                business_hours[day] = {
+                    'open': request.form.get(f'{day}_open'),
+                    'close': request.form.get(f'{day}_close')
+                }
+        
+        try:
+            # Update shop contact information
+            shop.phone = request.form.get('phone')
+            shop.email = request.form.get('email')
+            shop.website = request.form.get('website')
+            shop.business_hours = json.dumps(business_hours) if business_hours else None
+            
+            db.session.commit()
+            flash('Contact information updated successfully', 'success')
+            return redirect(url_for('shop.contact', shop_id=shop.id))
+        except Exception as e:
+            db.session.rollback()
+            flash('Error updating contact information. Please try again.', 'error')
+            current_app.logger.error(f'Error updating shop contact info: {str(e)}')
+    
+    return render_template('shop/edit_contact.html', shop=shop)

@@ -8,6 +8,10 @@ class Config:
     SQLALCHEMY_DATABASE_URI = os.getenv('DATABASE_URL', 'sqlite:///ecommerce.db')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
+    # File upload configuration
+    UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'ecommerce', 'static', 'images')
+    MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16MB max file size
+    
     # Mail settings
     MAIL_SERVER = os.getenv('MAIL_SERVER', 'smtp.gmail.com')
     MAIL_PORT = int(os.getenv('MAIL_PORT', 587))
@@ -17,6 +21,9 @@ class Config:
     
     # Google Maps configuration
     GOOGLE_MAPS_API_KEY = os.getenv('GOOGLE_MAPS_API_KEY')
+    
+    # TinyMCE configuration
+    TINYMCE_API_KEY = os.getenv('TINYMCE_API_KEY', 'your-api-key-here')
 
 class DevelopmentConfig(Config):
     DEBUG = True

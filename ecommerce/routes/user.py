@@ -16,35 +16,34 @@ user_bp = Blueprint('user', __name__, url_prefix='/user')
 
 @user_bp.route('/dashboard')
 @login_required
-@customer_required
 def dashboard():
-    # Get active orders - orders that are not completed or cancelled
+    # Get active orders (pending, confirmed, delivering)
     active_orders = Order.query.filter(
         Order.customer_id == current_user.id,
         Order.status.in_(['pending', 'confirmed', 'delivering'])
     ).order_by(Order.created_at.desc()).all()
-    
-    # Get cart items count from session
-    cart = session.get('cart', {})
-    cart_items_count = sum(item['quantity'] for item in cart.values())
-    
+
+    # Get recent orders
+    recent_orders = Order.query.filter_by(
+        customer_id=current_user.id
+    ).order_by(Order.created_at.desc()).limit(5).all()
+
+    # Initialize cart and get cart items count
+    if 'cart' not in session:
+        session['cart'] = {}
+    cart_items_count = sum(item['quantity'] for item in session['cart'].values())
+        
     # Get pending negotiations
-    pending_negotiations = Negotiation.query.filter(
-        Negotiation.customer_id == current_user.id,
-        Negotiation.status.in_(['pending', 'counter_offer'])
-    ).all()
-    
-    # Get recent orders for display
-    recent_orders = Order.query.filter_by(customer_id=current_user.id)\
-        .order_by(Order.created_at.desc())\
-        .limit(5).all()
-    
+    pending_negotiations = Negotiation.query.filter_by(
+        customer_id=current_user.id,
+        status='pending'
+    ).count()
+
     return render_template('user/dashboard.html',
                          active_orders=active_orders,
                          active_orders_count=len(active_orders),
                          cart_items_count=cart_items_count,
                          pending_negotiations=pending_negotiations,
-                         pending_negotiations_count=len(pending_negotiations),
                          recent_orders=recent_orders)
 
 @user_bp.route('/orders')
@@ -203,140 +202,69 @@ def make_counter_offer(nego_id):
     decision, counter_offer, message = process_negotiation(negotiation)
     
     if decision == 'accept':
-        negotiation.accept_offer(offered_price)
+        negotiation.status = 'accepted'
+        negotiation.final_price = offered_price
     elif decision == 'reject':
-        negotiation.reject_offer()
-    else:  # counter
-        negotiation.add_counter_offer(counter_offer)
+        negotiation.status = 'rejected'
+    else:
+        negotiation.status = 'counter_offer'
+        negotiation.counter_price = counter_offer
     
     db.session.commit()
     
     return jsonify({
         'status': 'success',
         'decision': decision,
-        'message': message,
         'counter_offer': counter_offer,
-        'negotiation': negotiation.to_dict()
+        'message': message
     })
 
 @user_bp.route('/settings', methods=['GET', 'POST'])
 @login_required
 def settings():
     if request.method == 'POST':
+        username = request.form.get('username')
+        email = request.form.get('email')
         address = request.form.get('address')
         lat = request.form.get('latitude')
         lng = request.form.get('longitude')
+        current_password = request.form.get('current_password')
+        new_password = request.form.get('new_password')
+        confirm_password = request.form.get('confirm_password')
+        
+        # Update basic info
+        if username and email:
+            current_user.username = username
+            current_user.email = email
+        
+        # Update address and coordinates
+        if address:
+            current_user.address = address
+            try:
+                if lat and lng:
+                    current_user.location_lat = float(lat)
+                    current_user.location_lng = float(lng)
+            except ValueError:
+                flash('Invalid coordinates provided.', 'error')
+                return redirect(url_for('user.settings'))
+        
+        # Update password if provided
+        if current_password and new_password and confirm_password:
+            if not current_user.check_password(current_password):
+                flash('Current password is incorrect.', 'error')
+                return redirect(url_for('user.settings'))
+                
+            if new_password != confirm_password:
+                flash('New passwords do not match.', 'error')
+                return redirect(url_for('user.settings'))
+                
+            current_user.set_password(new_password)
         
         try:
-            current_user.address = address
-            current_user.location_lat = float(lat) if lat else None
-            current_user.location_lng = float(lng) if lng else None
             db.session.commit()
             flash('Settings updated successfully!', 'success')
-        except ValueError:
-            flash('Invalid coordinates provided.', 'error')
+        except Exception as e:
+            db.session.rollback()
+            flash('Error updating settings.', 'error')
             
     return render_template('user/settings.html')
-
-@user_bp.route('/nearby-shops')
-@login_required
-def nearby_shops():
-    if not current_user.location_lat or not current_user.location_lng:
-        flash('Please update your location in settings.', 'warning')
-        return redirect(url_for('user.settings'))
-    
-    # Get search and filter parameters
-    search_query = request.args.get('q', '')
-    max_distance = float(request.args.get('distance', '10'))  # Default 10km
-    sort_by = request.args.get('sort', 'distance')
-    selected_categories = request.args.getlist('categories[]')
-    page = request.args.get('page', 1, type=int)
-    per_page = 12
-    
-    # Base query starting with active shops
-    query = Shop.query.filter_by(is_active=True)
-    
-    # Apply search filter if provided
-    if search_query:
-        query = query.join(Shop.products).filter(
-            or_(
-                Shop.name.ilike(f'%{search_query}%'),
-                Shop.description.ilike(f'%{search_query}%'),
-                Product.name.ilike(f'%{search_query}%'),
-                Product.category.ilike(f'%{search_query}%')
-            )
-        ).distinct()
-    
-    # Filter by categories if selected
-    if selected_categories:
-        query = query.join(Shop.products).filter(
-            Product.category.in_(selected_categories)
-        ).distinct()
-    
-    # Add distance calculation
-    query = query.add_columns(
-        func.round(
-            func.acos(
-                func.sin(func.radians(current_user.location_lat)) * 
-                func.sin(func.radians(Shop.location_lat)) +
-                func.cos(func.radians(current_user.location_lat)) * 
-                func.cos(func.radians(Shop.location_lat)) * 
-                func.cos(func.radians(Shop.location_lng) - 
-                        func.radians(current_user.location_lng))
-            ) * 6371,  # Earth's radius in kilometers
-            2
-        ).label('distance')
-    )
-    
-    # Filter by maximum distance
-    query = query.having(func.coalesce('distance', float('inf')) <= max_distance)
-    
-    # Apply sorting
-    if sort_by == 'rating':
-        query = query.order_by(Shop.rating.desc(), 'distance')
-    elif sort_by == 'products':
-        query = query.outerjoin(Shop.products)\
-                    .group_by(Shop.id)\
-                    .order_by(func.count(Product.id).desc(), 'distance')
-    else:  # distance
-        query = query.order_by('distance')
-    
-    # Execute query with pagination
-    pagination = query.paginate(page=page, per_page=per_page)
-    shops_with_distance = pagination.items
-    
-    # Prepare shops list with distance
-    shops = []
-    for shop, distance in shops_with_distance:
-        shop.distance = distance
-        shops.append(shop)
-    
-    # Get unique categories from all products for the filter
-    categories = db.session.query(Product.category)\
-        .distinct()\
-        .filter(Product.category.isnot(None))\
-        .order_by(Product.category)\
-        .all()
-    categories = [c[0] for c in categories]
-    
-    return render_template('user/nearby_shops.html',
-                         shops=shops,
-                         categories=categories,
-                         selected_categories=selected_categories,
-                         pagination=pagination)
-
-def calculate_distance(lat1, lon1, lat2, lon2):
-    """Calculate distance between two points in kilometers using Haversine formula"""
-    from math import radians, sin, cos, sqrt, atan2
-    
-    R = 6371  # Earth's radius in kilometers
-    
-    lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
-    dlat = lat2 - lat1
-    dlon = lon2 - lon1
-    
-    a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
-    c = 2 * atan2(sqrt(a), sqrt(1-a))
-    distance = R * c
-    
-    return distance
