@@ -10,11 +10,12 @@ login_manager = LoginManager()
 def create_app():
     app = Flask(__name__, 
         template_folder='ecommerce/templates',
-        static_folder='ecommerce/static')
+        static_folder='ecommerce/static',
+        static_url_path='')
 
     # Configuration
     app.config['SECRET_KEY'] = 'your-secret-key-here'
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///instance/ecommerce.db'
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///ecommerce.db'  # Simplified path for Vercel
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
     # Initialize Flask extensions
