@@ -1,10 +1,5 @@
-from flask import Flask
-
-app = Flask(__name__)
-
-@app.route('/')
-def home():
-    return 'Hello from QuickShop!'
-
-def handler(request):
-    return app
+def handler(event, context):
+    return {
+        'statusCode': 200,
+        'body': 'Hello from QuickShop!'
+    }
