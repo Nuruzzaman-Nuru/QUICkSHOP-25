@@ -1,16 +1,12 @@
-from flask import Flask, send_from_directory
-import os
-
-app = Flask(__name__)
-
-# Serve static files from the static directory
-@app.route('/static/<path:path>')
-def serve_static(path):
-    return send_from_directory('static', path)
-
-# Import the main application
+from flask import Flask
 from ecommerce import create_app
+
 app = create_app()
 
-if __name__ == '__main__':
-    app.run()
+# This is required for Vercel serverless function
+def handler(request):
+    """Handle incoming requests."""
+    with app.test_client() as client:
+        # Forward the request to the Flask app
+        resp = client.get(request.url)
+        return resp.get_data(), resp.status_code, resp.headers.to_wsgi_list()
