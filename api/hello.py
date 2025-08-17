@@ -1,18 +1,6 @@
 from flask import Flask, jsonify, request
-from flask_sqlalchemy import SQLAlchemy
-from flask_login import LoginManager
-import os
 
 app = Flask(__name__)
-
-# Configuration
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'default-secret-key')
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///ecommerce.db')
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-
-# Initialize extensions
-db = SQLAlchemy(app)
-login_manager = LoginManager(app)
 
 @app.route('/')
 def home():
@@ -44,10 +32,24 @@ def categories():
 
 def handler(request):
     """Handle requests in Vercel serverless function"""
-    with app.test_client() as test_client:
-        response = test_client.get(request.get('path', '/'))
+    try:
+        with app.test_client() as test_client:
+            # Get the path from the request, defaulting to '/'
+            path = request.get('path', '/')
+            
+            # Get the method from the request, defaulting to 'GET'
+            method = request.get('httpMethod', 'GET')
+            
+            # Make the request to the Flask app
+            response = test_client.open(path, method=method)
+            
+            return {
+                "statusCode": response.status_code,
+                "headers": dict(response.headers),
+                "body": response.get_data(as_text=True)
+            }
+    except Exception as e:
         return {
-            "statusCode": response.status_code,
-            "headers": dict(response.headers),
-            "body": response.get_data(as_text=True)
+            "statusCode": 500,
+            "body": str(e)
         }
