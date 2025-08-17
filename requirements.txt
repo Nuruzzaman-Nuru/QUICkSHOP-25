@@ -1,2 +1,2 @@
-flask==2.0.1
-Werkzeug==2.0.1
+# This file is intentionally empty
+# We don't need any requirements for a basic function
