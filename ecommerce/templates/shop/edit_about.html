@@ -22,6 +22,7 @@
                     </div>
                     
                     <form method="POST">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                         <div class="mb-3">
                             <label for="about" class="form-label">About Content</label>
                             <textarea name="about" id="about" class="form-control" rows="15">{{ shop.about or '' }}</textarea>

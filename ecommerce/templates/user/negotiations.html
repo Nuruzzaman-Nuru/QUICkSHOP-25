@@ -3,158 +3,110 @@
 {% block title %}My Negotiations{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
-    <h2>My Negotiations</h2>
+<div class="container py-4">
+    <h2 class="mb-4">My Negotiations</h2>
+    
+    <div class="row">
+        <div class="col-12">
+            <!-- Filter options -->
+            <div class="mb-4">
+                <form method="GET" class="form-inline">
+                    <div class="form-group mr-3">
+                        <label for="sort" class="mr-2">Sort by:</label>
+                        <select name="sort" id="sort" class="form-control" onchange="this.form.submit()">
+                            <option value="newest" {% if request.args.get('sort') == 'newest' %}selected{% endif %}>Newest First</option>
+                            <option value="highest_offer" {% if request.args.get('sort') == 'highest_offer' %}selected{% endif %}>Highest Offer</option>
+                            <option value="lowest_offer" {% if request.args.get('sort') == 'lowest_offer' %}selected{% endif %}>Lowest Offer</option>
+                        </select>
+                    </div>
+                </form>
+            </div>
 
-    <!-- Search and Filters -->
-    <div class="card mb-4">
-        <div class="card-body">
-            <form class="row g-3" method="GET">
-                <div class="col-md-5">
-                    <label class="form-label">Search Negotiations</label>
-                    <input type="text" class="form-control" name="q" 
-                           value="{{ request.args.get('q', '') }}"
-                           placeholder="Search by product or shop name...">
-                </div>
-                <div class="col-md-3">
-                    <label class="form-label">Status</label>
-                    <select class="form-select" name="status">
-                        <option value="">All Statuses</option>
-                        <option value="pending" {% if request.args.get('status') == 'pending' %}selected{% endif %}>Pending</option>
-                        <option value="counter_offer" {% if request.args.get('status') == 'counter_offer' %}selected{% endif %}>Counter Offer</option>
-                        <option value="accepted" {% if request.args.get('status') == 'accepted' %}selected{% endif %}>Accepted</option>
-                        <option value="rejected" {% if request.args.get('status') == 'rejected' %}selected{% endif %}>Rejected</option>
-                    </select>
-                </div>
-                <div class="col-md-3">
-                    <label class="form-label">Sort By</label>
-                    <select class="form-select" name="sort">
-                        <option value="newest" {% if request.args.get('sort') == 'newest' %}selected{% endif %}>Newest First</option>
-                        <option value="oldest" {% if request.args.get('sort') == 'oldest' %}selected{% endif %}>Oldest First</option>
-                        <option value="highest_offer" {% if request.args.get('sort') == 'highest_offer' %}selected{% endif %}>Highest Offer</option>
-                        <option value="lowest_offer" {% if request.args.get('sort') == 'lowest_offer' %}selected{% endif %}>Lowest Offer</option>
-                    </select>
-                </div>
-                <div class="col-md-1 d-flex align-items-end">
-                    <button type="submit" class="btn btn-primary w-100">
-                        <i class="bi bi-search"></i>
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- Negotiations List -->
-    {% if negotiations %}
-        <div class="row">
+            <!-- Negotiations list -->
             {% for negotiation in negotiations %}
-                <div class="col-md-6 mb-4">
-                    <div class="card h-100">
-                        <div class="card-header d-flex justify-content-between align-items-center">
-                            <h5 class="mb-0">{{ negotiation.product.name }}</h5>
-                            <span class="badge bg-{{ {
-                                'pending': 'warning',
-                                'counter_offer': 'info',
-                                'accepted': 'success',
-                                'rejected': 'danger'
-                            }[negotiation.status] }}">
-                                {{ negotiation.status|replace('_', ' ')|title }}
-                            </span>
-                        </div>
-                        <div class="card-body">
-                            <div class="mb-3">
-                                <strong>Shop:</strong> {{ negotiation.product.shop.name }}
-                            </div>
-                            <div class="mb-3">
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <div>Original Price:</div>
-                                    <strong class="text-muted">৳{{ "%.2f"|format(negotiation.initial_price) }}</strong>
-                                </div>
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <div>Your Offer:</div>
-                                    <strong class="text-primary">৳{{ "%.2f"|format(negotiation.offered_price) }}</strong>
-                                </div>
+            <div class="card mb-3">
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-8">
+                            <h5 class="card-title">{{ negotiation.product.name }}</h5>
+                            <p class="card-text">
+                                <strong>Status:</strong> 
+                                {% if negotiation.status == 'pending' %}
+                                    <span class="badge badge-warning">Pending</span>
+                                {% elif negotiation.status == 'counter_offer' %}
+                                    <span class="badge badge-info">Counter Offer</span>
+                                {% elif negotiation.status == 'accepted' %}
+                                    <span class="badge badge-success">Accepted</span>
+                                {% elif negotiation.status == 'rejected' %}
+                                    <span class="badge badge-danger">Rejected</span>
+                                {% endif %}
+                            </p>
+                            <div class="negotiation-details">
+                                <p><strong>Original Price:</strong> ${{ "%.2f"|format(negotiation.initial_price) }}</p>
+                                <p><strong>Your Offer:</strong> ${{ "%.2f"|format(negotiation.offered_price) }}</p>
                                 {% if negotiation.counter_price %}
-                                    <div class="d-flex justify-content-between align-items-center">
-                                        <div>Counter Offer:</div>
-                                        <strong class="text-success">৳{{ "%.2f"|format(negotiation.counter_price) }}</strong>
-                                    </div>
+                                <p><strong>Counter Offer:</strong> ${{ "%.2f"|format(negotiation.counter_price) }}</p>
                                 {% endif %}
                                 {% if negotiation.final_price %}
-                                    <div class="d-flex justify-content-between align-items-center">
-                                        <div>Final Price:</div>
-                                        <strong class="text-success h5 mb-0">৳{{ "%.2f"|format(negotiation.final_price) }}</strong>
-                                    </div>
+                                <p><strong>Final Price:</strong> ${{ "%.2f"|format(negotiation.final_price) }}</p>
                                 {% endif %}
-                            </div>
-                            <div class="d-flex justify-content-between align-items-center">
-                                <div>
-                                    <strong>Rounds:</strong> {{ negotiation.rounds }}
-                                </div>
-                                <small class="text-muted">{{ negotiation.created_at.strftime('%Y-%m-%d %H:%M') }}</small>
+                                <p><strong>Rounds:</strong> {{ negotiation.rounds }}</p>
                             </div>
                         </div>
-                        <div class="card-footer bg-transparent border-top-0">
-                            <div class="d-flex justify-content-between align-items-center">
-                                {% if negotiation.status == 'counter_offer' %}
-                                    <button class="btn btn-success accept-counter"
-                                            data-negotiation-id="{{ negotiation.id }}"
-                                            data-counter-price="{{ negotiation.counter_price }}">
-                                        Accept Counter Offer
-                                    </button>
-                                {% elif negotiation.status == 'accepted' %}
-                                    <a href="{{ url_for('main.cart') }}" class="btn btn-primary">
-                                        Go to Cart
-                                    </a>
-                                {% endif %}
-                                <a href="{{ url_for('user.negotiation_detail', nego_id=negotiation.id) }}" 
-                                   class="btn btn-outline-primary">View Details</a>
+                        <div class="col-md-4 text-right">
+                            {% if negotiation.status in ['pending', 'counter_offer'] %}
+                            <div class="counter-offer-form mb-3">                                <form class="form-inline justify-content-end" action="{{ url_for('api.negotiate_price', product_id=negotiation.product_id) }}" method="POST">
+                                    <div class="form-group mx-2">
+                                        <input type="number" step="0.01" min="0" class="form-control" name="offered_price" placeholder="Enter your offer" required>
+                                    </div>
+                                    <button type="submit" class="btn btn-primary">Make Counter Offer</button>
+                                </form>
                             </div>
+                            {% if negotiation.counter_price %}                            <form action="{{ url_for('api.accept_negotiation', negotiation_id=negotiation.id) }}" method="POST" class="d-inline">
+                                <button type="submit" class="btn btn-success">Accept Counter Offer</button>
+                            </form>
+                            {% endif %}
+                            {% endif %}
+                            
+                            <a href="{{ url_for('user.negotiation_detail', nego_id=negotiation.id) }}" class="btn btn-outline-secondary">View Details</a>
                         </div>
                     </div>
                 </div>
+            </div>
+            {% else %}
+            <div class="alert alert-info">
+                You don't have any active negotiations.
+            </div>
             {% endfor %}
-        </div>
 
-        <!-- Pagination -->
-        {% if pagination.pages > 1 %}
-            <nav class="mt-4">
+            <!-- Pagination -->
+            {% if pagination.pages > 1 %}
+            <nav aria-label="Negotiations pagination">
                 <ul class="pagination justify-content-center">
-                    {% for page in range(1, pagination.pages + 1) %}
-                        <li class="page-item {{ 'active' if page == pagination.page else '' }}">
-                            <a class="page-link" href="{{ url_for('user.negotiations', page=page, **request.args) }}">
-                                {{ page }}
-                            </a>
-                        </li>
+                    {% if pagination.has_prev %}
+                    <li class="page-item">
+                        <a class="page-link" href="{{ url_for('user.negotiations', page=pagination.prev_num, sort=request.args.get('sort', 'newest')) }}">Previous</a>
+                    </li>
+                    {% endif %}
+
+                    {% for page_num in pagination.iter_pages(left_edge=2, left_current=2, right_current=3, right_edge=2) %}
+                        {% if page_num %}
+                            <li class="page-item {% if page_num == pagination.page %}active{% endif %}">
+                                <a class="page-link" href="{{ url_for('user.negotiations', page=page_num, sort=request.args.get('sort', 'newest')) }}">{{ page_num }}</a>
+                            </li>
+                        {% else %}
+                            <li class="page-item disabled"><span class="page-link">...</span></li>
+                        {% endif %}
                     {% endfor %}
+
+                    {% if pagination.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="{{ url_for('user.negotiations', page=pagination.next_num, sort=request.args.get('sort', 'newest')) }}">Next</a>
+                    </li>
+                    {% endif %}
                 </ul>
             </nav>
-        {% endif %}
-    {% else %}
-        <div class="text-center py-5">
-            <h4>No negotiations found</h4>
-            <p class="text-muted">You haven't started any price negotiations yet.</p>
-            <a href="{{ url_for('shop.index') }}" class="btn btn-primary">Browse Shops</a>
-        </div>
-    {% endif %}
-</div>
-
-<!-- Accept Counter Offer Modal -->
-<div class="modal fade" id="acceptCounterModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Accept Counter Offer</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <p>Are you sure you want to accept the counter offer of 
-                   <strong>৳<span id="counterPrice"></span></strong>?</p>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-success" id="confirmAccept">Accept Offer</button>
-            </div>
+            {% endif %}
         </div>
     </div>
 </div>
@@ -163,47 +115,74 @@
 {% block scripts %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    let negotiationToAccept = null;
-
-    // Handle accept counter offer button clicks
-    document.querySelectorAll('.accept-counter').forEach(button => {
-        button.addEventListener('click', function() {
-            negotiationToAccept = this.dataset.negotiationId;
-            document.getElementById('counterPrice').textContent = 
-                parseFloat(this.dataset.counterPrice).toFixed(2);
-            new bootstrap.Modal(document.getElementById('acceptCounterModal')).show();
-        });
-    });
-
-    // Handle accept confirmation
-    document.getElementById('confirmAccept').addEventListener('click', function() {
-        if (!negotiationToAccept) return;
-
-        fetch(`/user/negotiation/${negotiationToAccept}/accept`, {
-            method: 'POST'
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.status === 'success') {
-                location.reload();
-            } else {
-                alert(data.message);
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            alert('Error accepting counter offer');
-        });
-    });
-
-    // Auto-submit form when sort or status changes
-    ['sort', 'status'].forEach(field => {
-        const select = document.querySelector(`select[name="${field}"]`);
-        if (select) {
-            select.addEventListener('change', function() {
-                this.form.submit();
+    // Handle counter offer form submissions
+    document.querySelectorAll('.counter-offer-form form').forEach(form => {
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const offeredPrice = parseFloat(this.querySelector('input[name="offered_price"]').value);
+            const submitButton = this.querySelector('button[type="submit"]');
+            
+            submitButton.disabled = true;
+            
+            fetch(this.action, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    offered_price: offeredPrice
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    // Reload page to show updated negotiation
+                    location.reload();
+                } else {
+                    alert(data.message || 'Error processing negotiation');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error processing negotiation');
+            })
+            .finally(() => {
+                submitButton.disabled = false;
             });
-        }
+        });
+    });
+
+    // Handle accept offer form submissions
+    document.querySelectorAll('form[action*="accept_negotiation"]').forEach(form => {
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const submitButton = this.querySelector('button[type="submit"]');
+            
+            submitButton.disabled = true;
+            
+            fetch(this.action, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    // Reload page to show updated negotiation
+                    location.reload();
+                } else {
+                    alert(data.message || 'Error accepting negotiation');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error accepting negotiation');
+            })
+            .finally(() => {
+                submitButton.disabled = false;
+            });
+        });
     });
 });
 </script>

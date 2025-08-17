@@ -1,5 +1,6 @@
 from datetime import datetime
 from .. import db
+from .review import Review
 
 class Shop(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -7,9 +8,9 @@ class Shop(db.Model):
     description = db.Column(db.Text)
     about = db.Column(db.Text)  # New field for shop-specific About content
     owner_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    location_lat = db.Column(db.Float, nullable=False)
-    location_lng = db.Column(db.Float, nullable=False)
-    address = db.Column(db.String(200), nullable=False)
+    location_lat = db.Column(db.Float, nullable=True)
+    location_lng = db.Column(db.Float, nullable=True)
+    address = db.Column(db.String(200), nullable=True)
     # Contact information fields
     phone = db.Column(db.String(20))
     email = db.Column(db.String(120))
@@ -17,17 +18,15 @@ class Shop(db.Model):
     business_hours = db.Column(db.Text)  # Stored as JSON string
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     is_active = db.Column(db.Boolean, default=True)
-    
-    # Relationships
+      # Relationships
     products = db.relationship('Product', backref='shop', lazy=True)
-    orders = db.relationship('Order', backref='shop', lazy=True)
 
-    def __init__(self, name, description, owner_id, location_lat, location_lng, address, about=None, phone=None, email=None, website=None, business_hours=None):
+    def __init__(self, name, description, owner_id, location_lat=None, location_lng=None, address=None, about=None, phone=None, email=None, website=None, business_hours=None):
         self.name = name
         self.description = description
         self.owner_id = owner_id
-        self.location_lat = location_lat
-        self.location_lng = location_lng
+        self.location_lat = location_lat if location_lat is not None else 0.0
+        self.location_lng = location_lng if location_lng is not None else 0.0
         self.address = address
         self.about = about
         self.phone = phone
@@ -68,11 +67,16 @@ class Product(db.Model):
     category = db.Column(db.String(50))  # Add category field
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
+    # Rating and review fields
+    rating = db.Column(db.Float, default=0.0)  # Average rating
+    rating_count = db.Column(db.Integer, default=0)  # Number of ratings
+    reviews = db.relationship(Review, backref='product', lazy=True)
+    
     # Negotiation settings
     min_price = db.Column(db.Float)  # Minimum acceptable price
     max_discount_percentage = db.Column(db.Float, default=20.0)  # Maximum allowed discount
     continue_iteration = db.Column(db.Boolean, default=False)  # Whether to continue negotiation after max discount
-    
+
     def __init__(self, name, description, price, stock, shop_id, min_price=None, max_discount_percentage=20.0, image_url=None, continue_iteration=False, category=None):
         self.name = name
         self.description = description
@@ -109,6 +113,17 @@ class Product(db.Model):
         self.stock = new_stock
         return True
 
+    def update_rating(self):
+        """Update the product's average rating based on all reviews"""
+        if not self.reviews:
+            self.rating = 0.0
+            self.rating_count = 0
+            return
+
+        total_rating = sum(review.rating for review in self.reviews)
+        self.rating_count = len(self.reviews)
+        self.rating = total_rating / self.rating_count
+
     def to_dict(self):
         """Convert product to dictionary"""
         return {
@@ -121,6 +136,8 @@ class Product(db.Model):
             'shop_name': self.shop.name,
             'image_url': self.image_url,
             'category': self.category,
+            'rating': self.rating,
+            'rating_count': self.rating_count,
             'is_negotiable': self.is_negotiable(),
             'min_price': self.min_price if self.is_negotiable() else None,
             'max_discount': self.max_discount_percentage if self.is_negotiable() else None,

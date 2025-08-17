@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+
+{% block title %}Delivery Person Details - {{ delivery_person.username }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="mb-0">Delivery Person Details</h3>
+                </div>
+                <div class="card-body">
+                    <div class="mb-4">
+                        <h5>Personal Information</h5>
+                        <p><strong>Name:</strong> {{ delivery_person.username }}</p>
+                        <p><strong>Email:</strong> {{ delivery_person.email }}</p>
+                        <p><strong>Phone:</strong> {{ delivery_person.phone or 'Not provided' }}</p>
+                        <p><strong>Status:</strong> 
+                            <span class="badge bg-{{ 'success' if delivery_person.is_active else 'danger' }}">
+                                {{ 'Active' if delivery_person.is_active else 'Inactive' }}
+                            </span>
+                        </p>
+                    </div>
+
+                    <div class="mb-4">
+                        <h5>Delivery Statistics</h5>
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="card bg-light">
+                                    <div class="card-body text-center">
+                                        <h6>Active Orders</h6>
+                                        <p class="h4">{{ delivery_person.delivery_orders|selectattr('status', 'in', ['confirmed', 'delivering'])|list|length }}</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card bg-light">
+                                    <div class="card-body text-center">
+                                        <h6>Completed Orders</h6>
+                                        <p class="h4">{{ delivery_person.delivery_orders|selectattr('status', 'eq', 'completed')|list|length }}</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card bg-light">
+                                    <div class="card-body text-center">
+                                        <h6>Total Delivered</h6>
+                                        <p class="h4">{{ delivery_person.delivery_orders|length }}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {% if delivery_person.delivery_orders %}
+                    <div class="mb-4">
+                        <h5>Recent Deliveries</h5>
+                        <div class="table-responsive">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>Order #</th>
+                                        <th>Customer</th>
+                                        <th>Status</th>
+                                        <th>Date</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for order in delivery_person.delivery_orders|sort(attribute='created_at', reverse=true)|slice(0, 5) %}
+                                    <tr>
+                                        <td>{{ order.id }}</td>
+                                        <td>{{ order.customer.username }}</td>
+                                        <td>
+                                            <span class="badge bg-{{ order_status_colors[order.status] }}">
+                                                {{ order.status|title }}
+                                            </span>
+                                        </td>
+                                        <td>{{ order.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    <div class="mt-4">
+                        <button type="button" class="btn btn-{{ 'danger' if delivery_person.is_active else 'success' }} toggle-status"
+                                data-user-id="{{ delivery_person.id }}">
+                            {{ 'Deactivate' if delivery_person.is_active else 'Activate' }} Account
+                        </button>
+                        <a href="{{ url_for('admin.manage_delivery') }}" class="btn btn-secondary">Back to List</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.querySelector('.toggle-status').addEventListener('click', function() {
+    const userId = this.dataset.userId;
+    const csrf_token = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+    
+    fetch(`/api/admin/delivery/${userId}/toggle-status`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': csrf_token
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert(data.error || 'Error updating status');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error updating status');
+    });
+});
+</script>
+{% endblock %}

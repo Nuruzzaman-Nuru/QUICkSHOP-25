@@ -10,6 +10,7 @@
                 <div class="card-body p-4">
                     <h2 class="mb-4">Add New Product</h2>
                     <form id="addProductForm" method="POST" enctype="multipart/form-data">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                         <div class="mb-3">
                             <label for="name" class="form-label">Product Name</label>
                             <input type="text" class="form-control" id="name" name="name" required>

@@ -4,7 +4,7 @@ from sqlalchemy import func, or_, and_, desc, asc, cast, String, case
 from ..models.order import Order, OrderItem
 from ..models.shop import Shop, Product
 from ..models.user import User
-from ..models.cart import CartItem
+from ..models.cart import CartItem, Cart
 from ..models.negotiation import Negotiation
 from ..utils.notifications import notify_customer_order_status, notify_admin_order_status
 from ..utils.ai.negotiation_bot import process_negotiation
@@ -28,23 +28,55 @@ def dashboard():
         customer_id=current_user.id
     ).order_by(Order.created_at.desc()).limit(5).all()
 
-    # Initialize cart and get cart items count
-    if 'cart' not in session:
-        session['cart'] = {}
-    cart_items_count = sum(item['quantity'] for item in session['cart'].values())
-        
+    # Get cart items and total
+    cart_items = []
+    cart_total = 0
+    
+    if current_user.is_authenticated:
+        cart = Cart.query.filter_by(user_id=current_user.id).first()
+        if cart:
+            cart_items = CartItem.query.filter_by(cart_id=cart.id).all()
+            for item in cart_items:
+                if item.product:
+                    price = item.negotiated_price or item.product.price
+                    cart_total += price * item.quantity
+                
     # Get pending negotiations
-    pending_negotiations = Negotiation.query.filter_by(
-        customer_id=current_user.id,
-        status='pending'
+    pending_negotiations = Negotiation.query.filter(
+        Negotiation.customer_id == current_user.id,
+        Negotiation.status.in_(['pending', 'counter_offer'])
     ).count()
+
+    # Get order statistics
+    order_stats = {
+        'total': Order.query.filter_by(customer_id=current_user.id).count(),
+        'completed': Order.query.filter_by(customer_id=current_user.id, status='completed').count(),
+        'total_spent': db.session.query(func.sum(Order.total_amount))
+            .filter_by(customer_id=current_user.id, status='completed')
+            .scalar() or 0
+    }
+
+    # Format cart items for template
+    formatted_cart_items = []
+    for item in cart_items:
+        if item.product:
+            price = item.negotiated_price or item.product.price
+            formatted_cart_items.append({
+                'product': item.product,
+                'quantity': item.quantity,
+                'price': price,
+                'total': price * item.quantity
+            })
 
     return render_template('user/dashboard.html',
                          active_orders=active_orders,
                          active_orders_count=len(active_orders),
-                         cart_items_count=cart_items_count,
+                         recent_orders=recent_orders,
+                         cart_items=formatted_cart_items,
+                         cart_total=cart_total,
+                         cart_count=len(formatted_cart_items),
                          pending_negotiations=pending_negotiations,
-                         recent_orders=recent_orders)
+                         order_stats=order_stats)
 
 @user_bp.route('/orders')
 @login_required
@@ -114,7 +146,19 @@ def order_detail(order_id):
     if order.customer_id != current_user.id:
         flash('Access denied.', 'error')
         return redirect(url_for('user.orders'))
-    return render_template('user/order_detail.html', order=order)
+        
+    # Define status color mapping for Bootstrap badges
+    order_status_colors = {
+        'pending': 'warning',
+        'confirmed': 'info',
+        'delivering': 'primary',
+        'completed': 'success',
+        'cancelled': 'danger'
+    }
+    
+    return render_template('user/order_detail.html',
+                         order=order,
+                         order_status_colors=order_status_colors)
 
 @user_bp.route('/track-order/<int:order_id>')
 @login_required
@@ -125,6 +169,52 @@ def track_order(order_id):
         flash('Access denied.', 'error')
         return redirect(url_for('user.orders'))
     return render_template('user/track_order.html', order=order)
+
+@user_bp.route('/order/<int:order_id>/update-address', methods=['POST'])
+@login_required
+@customer_required
+def update_order_address(order_id):
+    order = Order.query.get_or_404(order_id)
+    if order.customer_id != current_user.id:
+        return jsonify({
+            'status': 'error',
+            'message': 'Access denied'
+        }), 403
+
+    # Only allow updating address for orders that haven't started delivery
+    if order.status not in ['pending', 'confirmed']:
+        return jsonify({
+            'status': 'error',
+            'message': 'Cannot update address for orders that are being delivered or completed'
+        }), 400
+
+    try:
+        address = request.form.get('address', '').strip()
+        latitude = request.form.get('latitude', type=float)
+        longitude = request.form.get('longitude', type=float)
+
+        if not address or latitude is None or longitude is None:
+            return jsonify({
+                'status': 'error',
+                'message': 'Please provide a valid delivery address'
+            }), 400
+
+        order.delivery_address = address
+        order.delivery_lat = latitude
+        order.delivery_lng = longitude
+        db.session.commit()
+
+        return jsonify({
+            'status': 'success',
+            'message': 'Delivery address updated successfully'
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
 
 @user_bp.route('/negotiations')
 @login_required
@@ -242,43 +332,59 @@ def settings():
         address = request.form.get('address')
         lat = request.form.get('latitude')
         lng = request.form.get('longitude')
-        current_password = request.form.get('current_password')
-        new_password = request.form.get('new_password')
-        confirm_password = request.form.get('confirm_password')
+        email_notifications = 'email_notifications' in request.form
         
-        # Update basic info
-        if username and email:
+        if username and email:  # Basic validation
             current_user.username = username
             current_user.email = email
-        
-        # Update address and coordinates
-        if address:
-            current_user.address = address
-            try:
-                if lat and lng:
-                    current_user.location_lat = float(lat)
-                    current_user.location_lng = float(lng)
-            except ValueError:
-                flash('Invalid coordinates provided.', 'error')
-                return redirect(url_for('user.settings'))
-        
-        # Update password if provided
-        if current_password and new_password and confirm_password:
-            if not current_user.check_password(current_password):
-                flash('Current password is incorrect.', 'error')
-                return redirect(url_for('user.settings'))
-                
-            if new_password != confirm_password:
-                flash('New passwords do not match.', 'error')
-                return redirect(url_for('user.settings'))
-                
-            current_user.set_password(new_password)
-        
-        try:
-            db.session.commit()
-            flash('Settings updated successfully!', 'success')
-        except Exception as e:
-            db.session.rollback()
-            flash('Error updating settings.', 'error')
+            current_user.email_notifications = email_notifications
             
-    return render_template('user/settings.html')
+            # Handle location info
+            if address:  # Only update location if address is provided
+                current_user.address = address
+                current_user.location_lat = float(lat) if lat else None
+                current_user.location_lng = float(lng) if lng else None
+            else:  # Clear location info if no address
+                current_user.address = None
+                current_user.location_lat = None
+                current_user.location_lng = None
+            
+            try:
+                db.session.commit()
+                flash('Settings updated successfully!', 'success')
+            except Exception as e:
+                db.session.rollback()
+                flash('Error updating settings.', 'error')
+                
+    return render_template('user/settings.html', user=current_user)
+
+@user_bp.route('/delete-account', methods=['POST'])
+@login_required
+def delete_account():
+    """Delete the current user's account and all associated data"""
+    try:
+        # Delete user's cart items
+        cart = Cart.query.filter_by(user_id=current_user.id).first()
+        if cart:
+            CartItem.query.filter_by(cart_id=cart.id).delete()
+            db.session.delete(cart)
+
+        # Delete user's negotiations
+        Negotiation.query.filter_by(customer_id=current_user.id).delete()
+
+        # Mark user's orders as cancelled
+        Order.query.filter_by(customer_id=current_user.id).update({Order.status: 'cancelled'})
+
+        # Delete the user account
+        db.session.delete(current_user._get_current_object())
+        db.session.commit()
+
+        # Clear session
+        session.clear()
+        flash('Your account has been successfully deleted.', 'success')
+        return redirect(url_for('main.index'))
+
+    except Exception as e:
+        db.session.rollback()
+        flash('Error deleting account. Please try again.', 'error')
+        return redirect(url_for('user.settings'))

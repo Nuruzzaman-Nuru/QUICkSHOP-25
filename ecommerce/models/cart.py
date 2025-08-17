@@ -50,17 +50,19 @@ class CartItem(db.Model):
     
     @property
     def total_price(self):
-        """Calculate total price for this cart item"""
-        unit_price = self.negotiated_price or self.product.price
-        return unit_price * self.quantity
+        """Calculate total price for this item"""
+        if self.negotiated_price:
+            return self.negotiated_price * self.quantity
+        return self.product.price * self.quantity
     
     def to_dict(self):
         """Convert cart item to dictionary"""
         return {
             'id': self.id,
-            'product': self.product.to_dict(),
+            'product_id': self.product_id,
+            'product_name': self.product.name if self.product else None,
             'quantity': self.quantity,
-            'unit_price': self.negotiated_price or self.product.price,
+            'price': self.negotiated_price or (self.product.price if self.product else 0),
             'total_price': self.total_price,
             'created_at': self.created_at.isoformat(),
             'updated_at': self.updated_at.isoformat()

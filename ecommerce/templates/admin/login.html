@@ -23,7 +23,8 @@
                             {% endif %}
                         {% endwith %}
                         
-                        <form method="POST">
+                        <form method="POST" action="{{ url_for('auth.admin_login') }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                             <div class="mb-4">
                                 <label for="email" class="form-label">Admin Email</label>
                                 <input type="email" class="form-control" id="email" name="email" required 

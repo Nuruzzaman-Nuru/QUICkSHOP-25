@@ -263,6 +263,53 @@ def update_location():
             'message': str(e)
         }), 500
 
+@delivery_bp.route('/confirm-assignment/<int:order_id>')
+@login_required
+@delivery_required
+def confirm_assignment(order_id):
+    order = Order.query.get_or_404(order_id)
+    status = request.args.get('status')
+    
+    if order.delivery_person_id != current_user.id:
+        flash('You are not assigned to this order.', 'error')
+        return redirect(url_for('delivery.dashboard'))
+        
+    if status == 'accept':
+        order.status = 'delivering'
+        db.session.commit()
+        
+        # Notify customer and admin
+        notify_customer_order_status(order)
+        notify_admin_order_status(order)
+        
+        flash('Delivery assignment accepted. Please proceed with the delivery.', 'success')
+        return redirect(url_for('delivery.order_details', order_id=order.id))
+        
+    elif status == 'reject':
+        # Reset delivery person assignment
+        order.delivery_person_id = None
+        order.status = 'pending'
+        db.session.commit()
+        
+        # Notify admin
+        notify_admin_order_status(order, change='delivery_rejected')
+        
+        flash('Delivery assignment rejected.', 'info')
+        return redirect(url_for('delivery.dashboard'))
+        
+    return redirect(url_for('delivery.dashboard'))
+
+@delivery_bp.route('/order/<int:order_id>')
+@login_required
+@delivery_required
+def order_details(order_id):
+    order = Order.query.get_or_404(order_id)
+    if order.delivery_person_id != current_user.id:
+        flash('You are not assigned to this order.', 'error')
+        return redirect(url_for('delivery.dashboard'))
+    
+    return render_template('delivery/order_details.html', order=order)
+
 def calculate_distance(lat1, lon1, lat2, lon2):
     """Calculate distance between two points in kilometers using Haversine formula"""
     from math import radians, sin, cos, sqrt, atan2

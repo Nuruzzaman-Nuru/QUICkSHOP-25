@@ -1,122 +1,341 @@
-<!-- This template is rendered inside a modal -->
-<div class="row">
-    <div class="col-md-6">
-        <h6>Customer Information</h6>
-        <p>
-            <strong>Name:</strong> {{ order.customer.username }}<br>
-            <strong>Email:</strong> {{ order.customer.email }}
-        </p>
+{% extends "base.html" %}
 
-        <h6>Delivery Information</h6>
-        <p>
-            <strong>Address:</strong><br>
-            {{ order.delivery_address }}
-        </p>
-        
-        {% if order.delivery_person %}
-        <p>
-            <strong>Delivery Person:</strong><br>
-            {{ order.delivery_person.username }}<br>
-            <small class="text-muted">Last updated: {{ order.delivery_person.updated_at.strftime('%Y-%m-%d %H:%M') }}</small>
-        </p>
-        {% endif %}
-    </div>
-    
-    <div class="col-md-6">
-        <h6>Shop Information</h6>
-        <p>
-            <strong>Shop:</strong> {{ order.shop.name }}<br>
-            <strong>Address:</strong> {{ order.shop.address }}
-        </p>
+{% block title %}Order Details - #{{ order.id }}{% endblock %}
 
-        <h6>Order Status</h6>
-        <p>
-            <span class="badge bg-{{ 'primary' if order.status == 'pending' 
-                                else 'info' if order.status == 'in_delivery' 
-                                else 'success' if order.status == 'delivered'
-                                else 'secondary' }}">
-                {{ order.status|replace('_', ' ')|title }}
-            </span>
-        </p>
-    </div>
-</div>
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/print.css') }}" media="print">
+{% endblock %}
 
-<div class="row mt-4">
-    <div class="col-md-12">
-        <h6>Order Items</h6>
-        <div class="table-responsive">
-            <table class="table table-sm">
-                <thead>
-                    <tr>
-                        <th>Product</th>
-                        <th>Quantity</th>
-                        <th>Price</th>
-                        <th>Negotiated Price</th>
-                        <th class="text-end">Subtotal</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for item in order.items %}
-                    <tr>
-                        <td>{{ item.product.name }}</td>
-                        <td>{{ item.quantity }}</td>
-                        <td>${{ "%.2f"|format(item.price) }}</td>
-                        <td>
-                            {% if item.negotiated_price %}
-                                ${{ "%.2f"|format(item.negotiated_price) }}
-                                <span class="badge bg-success">
-                                    -{{ "%.1f"|format((1 - item.negotiated_price/item.price) * 100) }}%
-                                </span>
-                            {% else %}
-                                -
-                            {% endif %}
-                        </td>
-                        <td class="text-end">${{ "%.2f"|format(item.subtotal) }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-                <tfoot>
-                    <tr>
-                        <td colspan="4" class="text-end"><strong>Total:</strong></td>
-                        <td class="text-end"><strong>${{ "%.2f"|format(order.total_amount) }}</strong></td>
-                    </tr>
-                </tfoot>
-            </table>
-        </div>
-    </div>
-</div>
-
-<div class="row mt-4">
-    <div class="col-md-12">
-        <h6>Timeline</h6>
-        <div class="list-group">
-            <div class="list-group-item">
-                <div class="d-flex w-100 justify-content-between">
-                    <h6 class="mb-1">Order Created</h6>
-                    <small>{{ order.created_at.strftime('%Y-%m-%d %H:%M') }}</small>
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h3 class="mb-0">Order #{{ order.id }}</h3>
+                    <button onclick="window.print()" class="btn btn-outline-secondary no-print">
+                        <i class="bi bi-printer"></i> Print Order
+                    </button>
                 </div>
-                <p class="mb-1">Order #{{ order.id }} was created by {{ order.customer.username }}</p>
+                <div class="card-body">
+                    <!-- Print-only header -->
+                    <div class="print-header d-none d-print-block">
+                        <h2>Order Invoice</h2>
+                        <p>Order #{{ order.id }}</p>
+                        <p>{{ order.created_at.strftime('%Y-%m-%d %H:%M') }}</p>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <h5>Order Information</h5>
+                        <p><strong>Date:</strong> {{ order.created_at.strftime('%Y-%m-%d %H:%M') }}</p>
+                        <p><strong>Status:</strong> 
+                            <span class="badge bg-{{ order_status_colors[order.status] }}">
+                                {{ order.status|title }}
+                            </span>
+                        </p>
+                        <p><strong>Total Amount:</strong> ৳{{ "%.2f"|format(order.total_amount) }}</p>
+                        {% if order.coupon_code %}
+                        <p><strong>Coupon Applied:</strong> {{ order.coupon_code }}</p>
+                        <p><strong>Discount:</strong> ৳{{ "%.2f"|format(order.discount_amount) }}</p>
+                        {% endif %}
+                    </div>
+
+                    <div class="mb-4">
+                        <h5>Customer Information</h5>
+                        <p><strong>Name:</strong> {{ order.customer.name }}</p>
+                        <p><strong>Email:</strong> {{ order.customer.email }}</p>
+                        <p><strong>Phone:</strong> {{ order.customer.phone }}</p>
+                    </div>
+
+                    <div class="mb-4">
+                        <h5>Delivery Information</h5>
+                        <p><strong>Address:</strong> {{ order.delivery_address }}</p>
+                        {% if order.delivery_instructions %}
+                        <p><strong>Instructions:</strong> {{ order.delivery_instructions }}</p>
+                        {% endif %}
+                        <div id="map" style="height: 300px;" class="mb-3"></div>
+                    </div>
+
+                    <div class="mb-4">
+                        <h5>Order Items</h5>
+                        <div class="table-responsive">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>Item</th>
+                                        <th>Price</th>
+                                        <th>Quantity</th>
+                                        <th>Subtotal</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for item in order.items %}
+                                    <tr>
+                                        <td>{{ item.product.name }}</td>
+                                        <td>৳{{ "%.2f"|format(item.price) }}</td>
+                                        <td>{{ item.quantity }}</td>
+                                        <td>৳{{ "%.2f"|format(item.price * item.quantity) }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                                <tfoot>
+                                    <tr>
+                                        <td colspan="3" class="text-end"><strong>Subtotal:</strong></td>
+                                        <td>৳{{ "%.2f"|format(order.subtotal) }}</td>
+                                    </tr>
+                                    <tr>
+                                        <td colspan="3" class="text-end"><strong>Delivery Fee:</strong></td>
+                                        <td>৳{{ "%.2f"|format(order.delivery_fee) }}</td>
+                                    </tr>
+                                    {% if order.discount_amount %}
+                                    <tr>
+                                        <td colspan="3" class="text-end"><strong>Discount:</strong></td>
+                                        <td>-৳{{ "%.2f"|format(order.discount_amount) }}</td>
+                                    </tr>
+                                    {% endif %}
+                                    <tr>
+                                        <td colspan="3" class="text-end"><strong>Total:</strong></td>
+                                        <td><strong>৳{{ "%.2f"|format(order.total_amount) }}</strong></td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    </div>
+
+                    {% if order.status in ['pending', 'confirmed', 'delivering'] %}
+                    <div class="mb-4">
+                        <h5>Update Order Status</h5>
+                        <form method="POST" action="{{ url_for('admin.update_order_status', order_id=order.id) }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                            <div class="mb-3">
+                                <select class="form-select" name="status" required>
+                                    <option value="">Select Status</option>
+                                    {% if order.status == 'pending' %}
+                                        <option value="confirmed">Confirm Order</option>
+                                        <option value="cancelled">Cancel Order</option>
+                                    {% elif order.status == 'confirmed' %}
+                                        <option value="delivering">Start Delivery</option>
+                                        <option value="cancelled">Cancel Order</option>
+                                    {% elif order.status == 'delivering' %}
+                                        <option value="completed">Mark as Delivered</option>
+                                        <option value="cancelled">Cancel Order</option>
+                                    {% endif %}
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label for="notes" class="form-label">Status Notes (Optional)</label>
+                                <textarea class="form-control" id="notes" name="notes" rows="3"></textarea>
+                            </div>
+                            <button type="submit" class="btn btn-primary">Update Status</button>
+                        </form>
+                    </div>
+                    {% endif %}
+
+                    {% if order.status == 'pending' and not order.delivery_person %}
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h5 class="mb-0">Assign Delivery</h5>
+                        </div>
+                        <div class="card-body">
+                            <form id="assignDeliveryForm">
+                                <div class="form-group">
+                                    <select class="form-select" name="delivery_id" required>
+                                        <option value="">Select Delivery Person</option>
+                                        {% for person in available_delivery %}
+                                            <option value="{{ person.id }}">{{ person.name }} ({{ person.phone }})</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <button type="submit" class="btn btn-primary mt-3">Assign Delivery</button>
+                            </form>
+                        </div>
+                    </div>
+
+                    <script>
+                    document.getElementById('assignDeliveryForm').addEventListener('submit', function(e) {
+                        e.preventDefault();
+                        const formData = new FormData(this);
+                        
+                        fetch('/admin/order/{{ order.id }}/assign-delivery', {
+                            method: 'POST',
+                            body: formData,
+                            headers: {
+                                'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                            }
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                window.location.reload();
+                            } else {
+                                alert(data.error || 'Failed to assign delivery');
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error:', error);
+                            alert('Failed to assign delivery');
+                        });
+                    });
+                    </script>
+                    {% endif %}
+
+                    <div class="mb-4">
+                        <h5>Delivery Assignment</h5>
+                        {% if not order.delivery_person and order.status in ['pending', 'confirmed'] %}
+                            <form id="assignDeliveryForm" class="mt-3">
+                                <div class="form-group mb-3">
+                                    <label for="deliveryPerson">Select Delivery Person:</label>
+                                    <select class="form-select" id="deliveryPerson" name="delivery_id" required>
+                                        <option value="">Choose a delivery person...</option>
+                                        {% for person in available_delivery %}
+                                            <option value="{{ person.id }}">
+                                                {{ person.name }} - {{ person.phone }}
+                                                {% if person.current_location %}
+                                                    ({{ "%.2f"|format(person.current_location.distance) }} km away)
+                                                {% endif %}
+                                            </option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <button type="submit" class="btn btn-primary">Assign Delivery</button>
+                            </form>
+                        {% elif order.delivery_person %}
+                            <div class="card bg-light">
+                                <div class="card-body">
+                                    <h6>Assigned Delivery Person:</h6>
+                                    <p><strong>Name:</strong> {{ order.delivery_person.name }}</p>
+                                    <p><strong>Phone:</strong> {{ order.delivery_person.phone }}</p>
+                                    <p><strong>Status:</strong> 
+                                        <span class="badge bg-{{ 'success' if order.status == 'delivering' else 'secondary' }}">
+                                            {{ order.status|title }}
+                                        </span>
+                                    </p>
+                                </div>
+                            </div>
+                        {% else %}
+                            <p class="text-muted">Order cannot be assigned for delivery at this time.</p>
+                        {% endif %}
+                    </div>
+
+                    <script>
+                    document.getElementById('assignDeliveryForm')?.addEventListener('submit', function(e) {
+                        e.preventDefault();
+                        
+                        const deliveryId = document.getElementById('deliveryPerson').value;
+                        if (!deliveryId) {
+                            showErrorMessage('Please select a delivery person');
+                            return;
+                        }
+
+                        const formData = new FormData();
+                        formData.append('delivery_id', deliveryId);
+                        
+                        fetch('{{ url_for("admin.assign_delivery", order_id=order.id) }}', {
+                            method: 'POST',
+                            headers: {
+                                'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                            },
+                            body: formData
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                showSuccessMessage('Delivery person assigned successfully');
+                                setTimeout(() => window.location.reload(), 1500);
+                            } else {
+                                throw new Error(data.error || 'Failed to assign delivery person');
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error:', error);
+                            showErrorMessage(error.message || 'Failed to assign delivery person');
+                        });
+                    });
+                    </script>
+
+                    {% if not order.delivery_person and order.status == 'confirmed' %}
+                    <div class="mb-4">
+                        <a href="{{ url_for('admin.assign_delivery', order_id=order.id) }}" 
+                           class="btn btn-success">
+                            Assign Delivery Person
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
             </div>
-            
+        </div>
+
+        <div class="col-md-4">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">Order Timeline</h5>
+                </div>
+                <div class="card-body">
+                    <div class="timeline">
+                        {% for event in order.events|sort(attribute='created_at', reverse=True) %}
+                        <div class="timeline-item">
+                            <div class="timeline-marker"></div>
+                            <div class="timeline-content">
+                                <h6 class="mb-1">{{ event.status|title }}</h6>
+                                <p class="small text-muted mb-1">
+                                    {{ event.created_at.strftime('%Y-%m-%d %H:%M') }}
+                                </p>
+                                {% if event.notes %}
+                                <p class="mb-0">{{ event.notes }}</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
             {% if order.delivery_person %}
-            <div class="list-group-item">
-                <div class="d-flex w-100 justify-content-between">
-                    <h6 class="mb-1">Delivery Assigned</h6>
-                    <small>{{ order.updated_at.strftime('%Y-%m-%d %H:%M') }}</small>
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Delivery Information</h5>
                 </div>
-                <p class="mb-1">Assigned to delivery person: {{ order.delivery_person.username }}</p>
-            </div>
-            {% endif %}
-            
-            {% if order.status == 'delivered' %}
-            <div class="list-group-item">
-                <div class="d-flex w-100 justify-content-between">
-                    <h6 class="mb-1">Order Delivered</h6>
-                    <small>{{ order.updated_at.strftime('%Y-%m-%d %H:%M') }}</small>
+                <div class="card-body">
+                    <p><strong>Delivery Person:</strong> {{ order.delivery_person.name }}</p>
+                    <p><strong>Phone:</strong> {{ order.delivery_person.phone }}</p>
+                    <p><strong>Status:</strong> 
+                        <span class="badge bg-{{ delivery_status_colors[order.delivery_status] }}">
+                            {{ order.delivery_status|title }}
+                        </span>
+                    </p>
+                    {% if order.estimated_delivery_time %}
+                    <p><strong>Estimated Delivery:</strong> 
+                        {{ order.estimated_delivery_time.strftime('%H:%M') }}
+                    </p>
+                    {% endif %}
                 </div>
-                <p class="mb-1">Order was successfully delivered</p>
             </div>
             {% endif %}
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://maps.googleapis.com/maps/api/js?key={{ config['GOOGLE_MAPS_API_KEY'] }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const map = new google.maps.Map(document.getElementById('map'), {
+        zoom: 15,
+        center: { 
+            lat: {{ order.delivery_lat }}, 
+            lng: {{ order.delivery_lng }} 
+        }
+    });
+
+    new google.maps.Marker({
+        position: { 
+            lat: {{ order.delivery_lat }}, 
+            lng: {{ order.delivery_lng }} 
+        },
+        map: map,
+        title: 'Delivery Location'
+    });
+});
+</script>
+{% endblock %}

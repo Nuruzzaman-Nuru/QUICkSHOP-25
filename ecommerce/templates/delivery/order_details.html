@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+
+{% block title %}Delivery Details - Order #{{ order.id }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h3 class="mb-0">Order #{{ order.id }}</h3>
+                    <span class="badge bg-{{ order_status_colors[order.status] }}">{{ order.status|title }}</span>
+                </div>
+                <div class="card-body">
+                    <!-- Pickup Information -->
+                    <div class="mb-4">
+                        <h5>Pickup Information</h5>
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <p><strong>Shop Name:</strong> {{ order.shop.name }}</p>
+                                <p><strong>Shop Address:</strong> {{ order.shop.address }}</p>
+                                <p><strong>Shop Contact:</strong> {{ order.shop.phone }}</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Delivery Information -->
+                    <div class="mb-4">
+                        <h5>Delivery Information</h5>
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <p><strong>Customer Name:</strong> {{ order.customer.name }}</p>
+                                <p><strong>Delivery Address:</strong> {{ order.delivery_address }}</p>
+                                <p><strong>Customer Contact:</strong> {{ order.customer.phone }}</p>
+                                {% if order.special_instructions %}
+                                    <p><strong>Special Instructions:</strong> {{ order.special_instructions }}</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Order Items -->
+                    <div class="mb-4">
+                        <h5>Order Items</h5>
+                        <div class="table-responsive">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>Item</th>
+                                        <th>Quantity</th>
+                                        <th>Price</th>
+                                        <th>Total</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for item in order.items %}
+                                    <tr>
+                                        <td>{{ item.product.name }}</td>
+                                        <td>{{ item.quantity }}</td>
+                                        <td>৳{{ "%.2f"|format(item.price) }}</td>
+                                        <td>৳{{ "%.2f"|format(item.subtotal) }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                                <tfoot>
+                                    <tr>
+                                        <td colspan="3" class="text-end"><strong>Subtotal:</strong></td>
+                                        <td>৳{{ "%.2f"|format(order.subtotal) }}</td>
+                                    </tr>
+                                    <tr>
+                                        <td colspan="3" class="text-end"><strong>Delivery Fee:</strong></td>
+                                        <td>৳{{ "%.2f"|format(order.delivery_fee) }}</td>
+                                    </tr>
+                                    <tr>
+                                        <td colspan="3" class="text-end"><strong>Total Amount:</strong></td>
+                                        <td><strong>৳{{ "%.2f"|format(order.total_amount) }}</strong></td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Payment Information -->
+                    <div class="mb-4">
+                        <h5>Payment Information</h5>
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <p><strong>Payment Method:</strong> {{ order.payment_method|upper }}</p>
+                                {% if order.payment_method == 'cod' %}
+                                    <p class="text-danger">
+                                        <strong>Amount to Collect:</strong> ৳{{ "%.2f"|format(order.total_amount) }}
+                                    </p>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Map -->
+                    <div class="mb-4">
+                        <h5>Delivery Route</h5>
+                        <div id="map" style="height: 400px;"></div>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="d-grid gap-2">
+                        {% if order.status == 'delivering' %}
+                            <button class="btn btn-success btn-lg" onclick="markDelivered()">
+                                Mark as Delivered
+                            </button>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Status Updates Sidebar -->
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Delivery Updates</h5>
+                </div>
+                <div class="card-body">
+                    <div class="timeline">
+                        <!-- Add timeline items for order status updates -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function initMap() {
+    const map = new google.maps.Map(document.getElementById('map'), {
+        zoom: 13,
+        center: { lat: {{ order.delivery_lat }}, lng: {{ order.delivery_lng }} }
+    });
+
+    // Add markers for shop and delivery location
+    const shopMarker = new google.maps.Marker({
+        position: { 
+            lat: {{ order.shop.location_lat }}, 
+            lng: {{ order.shop.location_lng }} 
+        },
+        map: map,
+        title: '{{ order.shop.name }}',
+        icon: {
+            url: '{{ url_for("static", filename="images/shop-marker.png") }}',
+            scaledSize: new google.maps.Size(32, 32)
+        }
+    });
+
+    const deliveryMarker = new google.maps.Marker({
+        position: { 
+            lat: {{ order.delivery_lat }}, 
+            lng: {{ order.delivery_lng }} 
+        },
+        map: map,
+        title: 'Delivery Location'
+    });
+
+    // Draw route between shop and delivery location
+    const directionsService = new google.maps.DirectionsService();
+    const directionsRenderer = new google.maps.DirectionsRenderer({
+        map: map,
+        suppressMarkers: true
+    });
+
+    const request = {
+        origin: shopMarker.getPosition(),
+        destination: deliveryMarker.getPosition(),
+        travelMode: 'DRIVING'
+    };
+
+    directionsService.route(request, function(result, status) {
+        if (status == 'OK') {
+            directionsRenderer.setDirections(result);
+        }
+    });
+}
+
+function markDelivered() {
+    if (!confirm('Confirm that the order has been delivered?')) {
+        return;
+    }
+
+    fetch(`/api/order/{{ order.id }}/mark-delivered`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': '{{ csrf_token() }}'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showSuccessMessage('Order marked as delivered');
+            setTimeout(() => window.location.reload(), 1500);
+        } else {
+            throw new Error(data.error || 'Failed to mark order as delivered');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showErrorMessage(error.message);
+    });
+}
+</script>
+
+<script async defer
+    src="https://maps.googleapis.com/maps/api/js?key={{ config.GOOGLE_MAPS_API_KEY }}&callback=initMap">
+</script>
+{% endblock %}

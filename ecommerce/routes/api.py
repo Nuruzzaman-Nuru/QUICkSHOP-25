@@ -2,9 +2,10 @@ from flask import Blueprint, jsonify, request, session, url_for
 from flask_login import login_required, current_user
 from ..models.user import User
 from ..models.shop import Shop, Product
+from datetime import datetime
 from ..models.order import Order, OrderItem
 from ..models.negotiation import Negotiation, DeliveryNegotiation
-from ..models.cart import Cart, CartItem  # Add this line
+from ..models.cart import Cart, CartItem
 from ..utils.ai.negotiation_bot import create_negotiation_session, create_delivery_negotiation_session, process_delivery_negotiation
 from ..utils.notifications import (
     notify_shop_owner_new_order,
@@ -13,17 +14,50 @@ from ..utils.notifications import (
 )
 from ..utils.distance import calculate_distance
 from .. import db
-from sqlalchemy import or_, and_
+from sqlalchemy import or_, and_, func
 from ..routes.auth import customer_required
 
 api_bp = Blueprint('api', __name__, url_prefix='/api')
 
 def init_cart():
-    """Initialize cart in session if it doesn't exist"""
-    if 'cart' not in session:
-        session['cart'] = {}
-        session.modified = True
-    return session['cart']
+    """Initialize cart in database if it doesn't exist"""
+    if not current_user.is_authenticated:
+        if 'cart' not in session:
+            session['cart'] = {}
+            session.modified = True
+        return session['cart']
+    
+    # For authenticated users, use database cart
+    cart = Cart.query.filter_by(user_id=current_user.id).first()
+    
+    # If no cart exists, create one and migrate any session cart data
+    if not cart:
+        cart = Cart(user_id=current_user.id)
+        db.session.add(cart)
+        db.session.commit()  # Commit here to get the cart.id
+        
+        # Migrate any items from session cart if they exist
+        if session.get('cart'):
+            for product_id, item in session['cart'].items():
+                cart_item = CartItem(
+                    cart_id=cart.id,
+                    product_id=int(product_id),
+                    quantity=item['quantity'],
+                    negotiated_price=item.get('negotiated_price')
+                )
+                db.session.add(cart_item)
+            # Clear session cart after migration
+            session['cart'] = {}
+            session.modified = True
+        
+        db.session.commit()
+    return cart
+
+def get_or_create_cart():
+    """Get the current cart (session or database) based on user authentication status"""
+    if current_user.is_authenticated:
+        return init_cart()
+    return session.get('cart', {})
 
 @api_bp.route('/delivery/location/<int:delivery_person_id>')
 def get_delivery_location(delivery_person_id):
@@ -59,6 +93,39 @@ def get_delivery_location(delivery_person_id):
         'status': 'success',
         'location': location
     })
+
+@api_bp.route('/delivery/update-location', methods=['POST'])
+@login_required
+def update_delivery_location():
+    """Update delivery person's current location"""
+    try:
+        data = request.get_json()
+        lat = data.get('lat')
+        lng = data.get('lng')
+        
+        if not all([lat, lng]):
+            return jsonify({
+                'status': 'error',
+                'message': 'Coordinates are required'
+            }), 400
+        
+        # Update user location
+        current_user.location_lat = float(lat)
+        current_user.location_lng = float(lng)
+        current_user.location_updated_at = datetime.utcnow()
+        db.session.commit()
+        
+        return jsonify({
+            'status': 'success',
+            'message': 'Location updated successfully'
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
 
 @api_bp.route('/admin/delivery-status')
 @login_required
@@ -122,10 +189,9 @@ def dashboard_stats():
 
 @api_bp.route('/add', methods=['POST'])
 @login_required
-@customer_required
+@customer_required  
 def add_to_cart():
     try:
-        init_cart()
         data = request.get_json()
         
         if not data:
@@ -134,9 +200,10 @@ def add_to_cart():
                 'message': 'Invalid request data'
             }), 400
 
-        product_id = str(data.get('product_id'))
+        product_id = int(data.get('product_id'))
         quantity = int(data.get('quantity', 1))
-        
+        negotiated_price = data.get('negotiated_price')
+
         # Validate product exists
         product = Product.query.get_or_404(product_id)
         
@@ -146,38 +213,65 @@ def add_to_cart():
                 'status': 'error',
                 'message': 'Product is out of stock'
             }), 400
+
+        # Get user's cart
+        cart = init_cart()
         
-        # Calculate total quantity including what's already in cart
-        current_quantity = session['cart'].get(product_id, {}).get('quantity', 0)
-        total_quantity = current_quantity + quantity
+        # Check if product already in cart
+        existing_item = CartItem.query.filter_by(
+            cart_id=cart.id, 
+            product_id=product_id
+        ).first()
         
-        # Validate stock availability
-        if product.stock < total_quantity:
+        # Calculate new total quantity considering existing cart items
+        new_total_quantity = quantity
+        if existing_item:
+            new_total_quantity += existing_item.quantity
+        
+        # Validate total quantity against stock
+        if product.stock < new_total_quantity:
             return jsonify({
-                'status': 'error',
+                'status': 'error', 
                 'message': f'Only {product.stock} items available'
             }), 400
             
-        # Update or add cart item
-        session['cart'][product_id] = {
-            'quantity': total_quantity,
-            'price': float(product.price),
-            'name': product.name,
-            'shop_id': product.shop_id,
-            'shop_name': product.shop.name
-        }
-        session.modified = True
+        # Update or create cart item
+        if existing_item:
+            existing_item.quantity = new_total_quantity
+            if negotiated_price is not None:
+                existing_item.negotiated_price = float(negotiated_price)
+        else:
+            cart_item = CartItem(
+                cart_id=cart.id,
+                product_id=product_id,
+                quantity=quantity,
+                negotiated_price=float(negotiated_price) if negotiated_price is not None else None
+            )
+            db.session.add(cart_item)
         
-        # Calculate total items in cart
-        cart_count = sum(item['quantity'] for item in session['cart'].values())
+        # Temporarily reduce product stock
+        product.stock -= quantity
+        
+        db.session.commit()
+        
+        # Calculate cart statistics
+        cart_count = CartItem.query.with_entities(
+            func.sum(CartItem.quantity)
+        ).filter_by(cart_id=cart.id).scalar() or 0
         
         return jsonify({
             'status': 'success',
-            'message': 'Product added to cart',
-            'cart_count': cart_count
+            'message': f'Added {quantity} {product.name} to cart',
+            'cart_count': cart_count,
+            'product': {
+                'id': product.id,
+                'name': product.name,
+                'remaining_stock': product.stock
+            }
         })
         
     except Exception as e:
+        db.session.rollback()
         return jsonify({
             'status': 'error',
             'message': str(e)
@@ -189,35 +283,81 @@ def add_to_cart():
 def update_cart():
     try:
         data = request.get_json()
-        product_id = str(data.get('product_id'))
+        product_id = int(data.get('product_id'))
         quantity = int(data.get('quantity', 0))
         
-        if quantity <= 0:
-            if product_id in session['cart']:
-                del session['cart'][product_id]
-                session.modified = True
-        else:
-            product = Product.query.get_or_404(product_id)
-            if product.stock < quantity:
-                return jsonify({
-                    'status': 'error',
-                    'message': f'Only {product.stock} items available'
-                }), 400
-                
-            if product_id in session['cart']:
-                session['cart'][product_id]['quantity'] = quantity
-                session.modified = True
+        # Validate product exists and has enough stock
+        product = Product.query.get_or_404(product_id)
+        if quantity > 0 and product.stock < quantity:
+            return jsonify({
+                'status': 'error',
+                'message': f'Only {product.stock} items available'
+            }), 400
+
+        cart = init_cart()
         
-        cart_total = sum(item['quantity'] * item['price'] for item in session['cart'].values())
-        cart_count = sum(item['quantity'] for item in session['cart'].values())
+        if isinstance(cart, dict):  # Session cart
+            if quantity <= 0:
+                cart.pop(str(product_id), None)
+            else:
+                cart[str(product_id)] = {
+                    'quantity': quantity,
+                    'price': float(product.price),
+                    'negotiated_price': cart.get(str(product_id), {}).get('negotiated_price')
+                }
+            session['cart'] = cart
+            session.modified = True
+            
+            # Calculate totals for session cart
+            cart_total = sum(
+                item['quantity'] * (item.get('negotiated_price', Product.query.get(int(pid)).price))
+                for pid, item in cart.items()
+            )
+            cart_count = sum(item['quantity'] for item in cart.values())
+            
+        else:  # Database cart
+            cart_item = CartItem.query.filter_by(
+                cart_id=cart.id,
+                product_id=product_id
+            ).first()
+            
+            if cart_item:
+                if quantity <= 0:
+                    db.session.delete(cart_item)
+                else:
+                    cart_item.quantity = quantity
+                db.session.commit()
+            elif quantity > 0:
+                cart_item = CartItem(
+                    cart_id=cart.id,
+                    product_id=product_id,
+                    quantity=quantity
+                )
+                db.session.add(cart_item)
+                db.session.commit()
+            
+            # Calculate totals for database cart
+            cart_total = sum(
+                item.quantity * (item.negotiated_price or item.product.price)
+                for item in cart.items
+            )
+            cart_count = sum(item.quantity for item in cart.items)
         
         return jsonify({
             'status': 'success',
             'message': 'Cart updated',
+            'item': {
+                'id': product_id,
+                'quantity': quantity,
+                'price': float(product.price),
+                'total': quantity * float(product.price),
+                'stock': product.stock,
+            },
             'cart_total': cart_total,
             'cart_count': cart_count
         })
     except Exception as e:
+        db.session.rollback()
         return jsonify({
             'status': 'error',
             'message': str(e)
@@ -227,51 +367,93 @@ def update_cart():
 @login_required
 @customer_required
 def remove_from_cart():
-    data = request.get_json()
-    product_id = str(data.get('product_id'))
-    
-    if product_id in session['cart']:
-        del session['cart'][product_id]
-        session.modified = True
-    
-    return jsonify({
-        'status': 'success',
-        'message': 'Item removed from cart'
-    })
+    try:
+        data = request.get_json()
+        product_id = int(data.get('product_id'))
+        
+        cart = init_cart()
+        cart_item = CartItem.query.filter_by(
+            cart_id=cart.id,
+            product_id=product_id
+        ).first()
+        
+        if cart_item:
+            db.session.delete(cart_item)
+            db.session.commit()
+        
+        return jsonify({
+            'status': 'success',
+            'message': 'Item removed from cart',
+            'cart_count': sum(item.quantity for item in cart.items)
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
 
 @api_bp.route('/checkout', methods=['POST'])
 @login_required
 @customer_required
 def checkout():
-    init_cart()
     data = request.get_json()
-    selected_items = data.get('selected_items', [])
+    shipping = data.get('shipping', {})
+    payment_method = data.get('payment_method', 'cod')
     
-    if not selected_items:
+    # Validate shipping address is provided
+    if not shipping or not shipping.get('address'):
         return jsonify({
             'status': 'error',
-            'message': 'No items selected for checkout'
+            'message': 'Shipping address is required'
         }), 400
     
-    # Get shipping address from session
-    shipping = session.get('cart_shipping', {})
-    if not shipping:
+    # Validate payment method
+    valid_payment_methods = ['cod', 'bkash', 'nagad', 'card']
+    if payment_method not in valid_payment_methods:
         return jsonify({
             'status': 'error',
-            'message': 'Please select a shipping address'
+            'message': 'Invalid payment method'
         }), 400
+        
+    # If coordinates are provided, validate them
+    if shipping.get('lat') is not None and shipping.get('lng') is not None:
+        try:
+            lat = float(shipping['lat'])
+            lng = float(shipping['lng'])
+            if not (-90 <= lat <= 90) or not (-180 <= lng <= 180):
+                return jsonify({
+                    'status': 'error',
+                    'message': 'Invalid coordinates provided'
+                }), 400
+        except (ValueError, TypeError):
+            return jsonify({
+                'status': 'error',
+                'message': 'Invalid coordinate format'
+            }), 400
+
+    # Get cart items from database cart
+    cart = get_or_create_cart()
+    if isinstance(cart, dict):
+        return jsonify({
+            'status': 'error',
+            'message': 'Please log in to checkout'
+        }), 401
     
-    # Group selected items by shop
+    if not cart.items:
+        return jsonify({
+            'status': 'error',
+            'message': 'Cart is empty'
+        }), 400
+
+    # Group cart items by shop
     shop_orders = {}
-    cart = session['cart']
-    
-    for item_id in selected_items:
-        if item_id not in cart:
+    for cart_item in cart.items:
+        product = cart_item.product
+        if not product:
             continue
             
-        item = cart[item_id]
-        product = Product.query.get(item_id)
-        if not product or product.stock < item['quantity']:
+        if product.stock < cart_item.quantity:
             return jsonify({
                 'status': 'error',
                 'message': f'Not enough stock for {product.name}'
@@ -282,10 +464,10 @@ def checkout():
             
         shop_orders[product.shop_id].append({
             'product': product,
-            'quantity': item['quantity'],
-            'price': item['price']
+            'quantity': cart_item.quantity,
+            'price': cart_item.negotiated_price or product.price
         })
-    
+
     try:
         # Create separate orders for each shop
         orders = []
@@ -294,47 +476,57 @@ def checkout():
                 customer_id=current_user.id,
                 shop_id=shop_id,
                 delivery_address=shipping['address'],
-                delivery_lat=shipping['lat'],
-                delivery_lng=shipping['lng']
+                delivery_lat=shipping.get('lat'),
+                delivery_lng=shipping.get('lng'),
+                status='pending',
+                payment_method=payment_method,
+                payment_status='pending'
             )
+            
+            # Add payment details
+            payment_details = {}
+            if payment_method in ['bkash', 'nagad']:
+                payment_details['mobile_number'] = data.get(f'{payment_method}_number')
+            elif payment_method == 'card':
+                payment_details.update({
+                    'card_number': data.get('card_number'),
+                    'card_expiry': data.get('card_expiry'),
+                    'card_cvv': data.get('card_cvv')
+                })
+            order.payment_details = payment_details
+            
             order.special_instructions = data.get('special_instructions', '')
             db.session.add(order)
             
             # Add items to order
             total_amount = 0
             for item in items:
+                product = item['product']
                 order_item = OrderItem(
                     order=order,
-                    product_id=item['product'].id,
+                    product_id=product.id,
                     quantity=item['quantity'],
                     price=item['price']
                 )
                 db.session.add(order_item)
-                
                 # Update product stock
-                item['product'].stock -= item['quantity']
+                product.stock -= item['quantity']
                 total_amount += item['quantity'] * item['price']
             
             order.total_amount = total_amount
             orders.append(order)
         
-        db.session.commit()
+        # Clear cart after creating orders
+        for item in cart.items:
+            db.session.delete(item)
         
-        # Remove checked out items from cart
-        for item_id in selected_items:
-            if item_id in session['cart']:
-                del session['cart'][item_id]
-        session.modified = True
+        db.session.commit()
         
         # Send notifications
         for order in orders:
             notify_shop_owner_new_order(order)
             notify_customer_order_status(order)
-            notify_admin_order_status(order, {
-                'old': None,
-                'new': 'pending',
-                'action': 'order_created'
-            })
+            notify_admin_order_status(order)
         
         return jsonify({
             'status': 'success',
@@ -354,47 +546,97 @@ def checkout():
 @customer_required
 def get_cart_count():
     """Get the total number of items in cart (sum of quantities)"""
-    cart = init_cart()
-    count = sum(item['quantity'] for item in cart.values())
-    return jsonify({
-        'status': 'success',
-        'count': count
-    })
+    try:
+        cart = init_cart()
+        if isinstance(cart, dict):  # Session cart
+            count = sum(item['quantity'] for item in cart.values())
+            total = sum(
+                item['quantity'] * (
+                    item.get('negotiated_price', 
+                    Product.query.get(int(product_id)).price)
+                ) for product_id, item in cart.items()
+            )
+        else:  # Database cart
+            count = sum(item.quantity for item in cart.items)
+            total = cart.total_amount
+            
+        return jsonify({
+            'status': 'success',
+            'count': count,
+            'total': total
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
 
 @api_bp.route('/cart/items')
 @login_required
 @customer_required
 def get_cart_items():
-    cart = init_cart()
-    items = []
-    total = 0
-    
-    for product_id, item in cart.items():
-        product = Product.query.get(product_id)
-        if product:
-            price = item['price']
-            quantity = item['quantity']
-            subtotal = price * quantity
-            total += subtotal
-            
-            items.append({
-                'id': product_id,
-                'name': product.name,
-                'image_url': product.image_url,
-                'price': price,
-                'quantity': quantity,
-                'stock': product.stock,
-                'subtotal': subtotal,
-                'shop_id': product.shop_id,
-                'shop_name': product.shop.name
-            })
-    
-    return jsonify({
-        'status': 'success',
-        'items': items,
-        'total': total,
-        'count': sum(item['quantity'] for item in cart.values())
-    })
+    try:
+        cart = init_cart()
+        items = []
+        total = 0
+        
+        if isinstance(cart, dict):  # Session cart
+            for product_id, item in cart.items():
+                product = Product.query.get(int(product_id))
+                if product:
+                    item_price = item.get('negotiated_price', product.price)
+                    item_total = item['quantity'] * item_price
+                    total += item_total
+                    
+                    items.append({
+                        'id': product.id,
+                        'name': product.name,
+                        'price': float(item_price),
+                        'original_price': float(product.price),
+                        'quantity': item['quantity'],
+                        'total': float(item_total),
+                        'image_url': product.image_url if hasattr(product, 'image_url') else None,
+                        'shop_name': product.shop.name if product.shop else None,
+                        'shop_id': product.shop_id,
+                        'stock': product.stock,
+                        'description': product.description,
+                        'is_negotiable': product.is_negotiable() if hasattr(product, 'is_negotiable') else False
+                    })
+        else:  # Database cart
+            for cart_item in cart.items:
+                product = cart_item.product
+                if product:
+                    item_price = cart_item.negotiated_price or product.price
+                    item_total = cart_item.quantity * item_price
+                    total += item_total
+                    
+                    items.append({
+                        'id': product.id,
+                        'name': product.name,
+                        'price': float(item_price),
+                        'original_price': float(product.price),
+                        'quantity': cart_item.quantity,
+                        'total': float(item_total),
+                        'image_url': product.image_url if hasattr(product, 'image_url') else None,
+                        'shop_name': product.shop.name if product.shop else None,
+                        'shop_id': product.shop_id,
+                        'stock': product.stock,
+                        'description': product.description,
+                        'is_negotiable': product.is_negotiable() if hasattr(product, 'is_negotiable') else False
+                    })
+        
+        return jsonify({
+            'status': 'success',
+            'items': items,
+            'total': float(total),
+            'count': len(items),
+            'cart_type': 'session' if isinstance(cart, dict) else 'database'
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
 
 @api_bp.route('/cart/change', methods=['POST'])
 @login_required
@@ -454,21 +696,42 @@ def apply_voucher():
 @login_required
 @customer_required
 def batch_delete_cart_items():
-    """Delete multiple items from cart at once"""
-    data = request.get_json()
-    item_ids = data.get('item_ids', [])
-    
-    cart = init_cart()
-    for item_id in item_ids:
-        if str(item_id) in cart:
-            del cart[str(item_id)]
-    
-    session.modified = True
-    
-    return jsonify({
-        'status': 'success',
-        'message': 'Items removed from cart'
-    })
+    try:
+        data = request.get_json()
+        product_ids = data.get('product_ids', [])
+        
+        if not product_ids:
+            return jsonify({
+                'status': 'error',
+                'message': 'No product IDs provided'
+            }), 400
+        
+        cart = init_cart()
+        
+        if isinstance(cart, dict):  # Session cart
+            for product_id in product_ids:
+                cart.pop(str(product_id), None)
+            session['cart'] = cart
+        else:  # Database cart
+            try:
+                CartItem.query.filter(
+                    CartItem.cart_id == cart.id,
+                    CartItem.product_id.in_(product_ids)
+                ).delete(synchronize_session=False)
+                db.session.commit()
+            except Exception as e:
+                db.session.rollback()
+                raise e
+        
+        return jsonify({
+            'status': 'success',
+            'message': 'Items removed from cart'
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
 
 @api_bp.route('/cart/shipping-address', methods=['GET', 'POST'])
 @login_required
@@ -480,11 +743,11 @@ def cart_shipping_address():
         address = data.get('address')
         lat = data.get('lat')
         lng = data.get('lng')
-        
-        if not all([address, lat, lng]):
+          # Address is optional
+        if address and not all([lat, lng]):
             return jsonify({
                 'status': 'error',
-                'message': 'Address and coordinates are required'
+                'message': 'If providing an address, coordinates are required'
             }), 400
         
         session['cart_shipping'] = {
@@ -508,82 +771,72 @@ def cart_shipping_address():
         'lng': shipping.get('lng')
     })
 
-@api_bp.route('/negotiate/<int:product_id>', methods=['POST'])
+@api_bp.route('/product/<int:product_id>/negotiate', methods=['POST'])
 @login_required
 def negotiate_price(product_id):
-    try:
-        product = Product.query.get_or_404(product_id)
-        
-        if not product.is_negotiable():
-            return jsonify({
-                'status': 'error',
-                'message': 'This product does not support price negotiation'
-            }), 400
-        
-        data = request.get_json()
-        if not data or 'offered_price' not in data:
-            return jsonify({
-                'status': 'error',
-                'message': 'Please enter a valid offer amount'
-            }), 400
-        
-        try:
-            offered_price = float(data['offered_price'])
-            if offered_price <= 0:
-                raise ValueError()
-        except (TypeError, ValueError):
-            return jsonify({
-                'status': 'error',
-                'message': 'Please enter a valid positive number for the offer'
-            }), 400
-        
-        # Get or create negotiation session
-        negotiation = Negotiation.query.filter_by(
-            product_id=product_id,
-            customer_id=current_user.id,
-            status='pending'
-        ).first()
-        
-        if not negotiation:
-            negotiation = Negotiation(
-                product_id=product_id,
-                customer_id=current_user.id,
-                initial_price=product.price,
-                offered_price=offered_price
-            )
-            db.session.add(negotiation)
-        else:
-            negotiation.offered_price = offered_price
-            negotiation.rounds += 1
-        
-        # Process with AI negotiation bot
-        bot = create_negotiation_session(product)
-        decision, counter_offer, message = bot.evaluate_offer(offered_price)
-        
-        if decision == 'accept':
-            negotiation.accept_offer(offered_price)
-        elif decision == 'reject':
-            negotiation.reject_offer()
-        else:  # counter
-            negotiation.add_counter_offer(counter_offer)
-            
-        db.session.commit()
-        
-        return jsonify({
-            'status': 'success',
-            'decision': decision,
-            'message': message,
-            'counter_offer': counter_offer,
-            'negotiation': negotiation.to_dict()
-        })
-        
-    except Exception as e:
-        db.session.rollback()
-        # Log the actual error for debugging
-        print(f"Negotiation error: {str(e)}")
+    product = Product.query.get_or_404(product_id)
+    data = request.get_json()
+    
+    # Check if product allows negotiation
+    if not product.is_negotiable():
         return jsonify({
             'status': 'error',
-            'message': 'Sorry, there was an error processing your offer. Please try again.'
+            'message': 'This product does not support price negotiation'
+        }), 400
+    
+    # Get or create negotiation
+    negotiation = Negotiation.query.filter_by(
+        product_id=product_id,
+        customer_id=current_user.id,
+        status='pending'
+    ).first()
+    
+    if not negotiation:
+        negotiation = Negotiation(
+            product_id=product_id,
+            customer_id=current_user.id,
+            initial_price=product.price,
+            offered_price=data['offered_price']
+        )
+        db.session.add(negotiation)
+    else:
+        # Check if further negotiation is allowed
+        if negotiation.status == 'counter_offer' and not product.allow_continue_iteration():
+            return jsonify({
+                'status': 'error',
+                'message': 'Further negotiation is not allowed for this product'
+            }), 400
+        
+        negotiation.offered_price = data['offered_price']
+        negotiation.rounds += 1
+    
+    # Check if price is acceptable
+    if product.can_negotiate_price(data['offered_price']):
+        negotiation.status = 'accepted'
+        negotiation.final_price = data['offered_price']
+    else:
+        # Calculate counter offer
+        discount = (product.price - product.min_price) * 0.7  # Allow 70% of maximum possible discount
+        counter_price = max(product.price - discount, product.min_price)
+        
+        negotiation.status = 'counter_offer'
+        negotiation.counter_price = counter_price
+    
+    try:
+        db.session.commit()
+        return jsonify({
+            'status': 'success',
+            'negotiation': {
+                'status': negotiation.status,
+                'counter_price': negotiation.counter_price,
+                'final_price': negotiation.final_price
+            }
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'status': 'error',
+            'message': 'Error processing negotiation'
         }), 500
 
 @api_bp.route('/negotiation/<int:negotiation_id>/accept', methods=['POST'])

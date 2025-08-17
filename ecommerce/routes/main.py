@@ -1,17 +1,31 @@
-from flask import Blueprint, render_template, session, send_from_directory, request, redirect, url_for, jsonify, current_app, flash
+from flask import Blueprint, render_template, session, flash, redirect, url_for, request, current_app, send_from_directory, jsonify
 from flask_login import login_required, current_user
-from sqlalchemy import or_, func, and_
+from sqlalchemy import func, or_
 from ..models.shop import Shop, Product
-from .. import db
-from .api import init_cart
+from ..models.order import Order, OrderItem
+from ..models.cart import Cart, CartItem
 from ..routes.auth import customer_required
+from ..routes.api import init_cart, get_or_create_cart
+from ..utils.notifications import notify_shop_owner_new_order, notify_customer_order_status, notify_admin_order_status
+from .. import db
 
 main_bp = Blueprint('main', __name__)
 
 @main_bp.route('/')
 def index():
+    # Get active shops
     featured_shops = Shop.query.filter_by(is_active=True).limit(6).all()
-    return render_template('main/home.html', featured_shops=featured_shops)
+    
+    # Get featured products - products with high ratings or recent additions
+    featured_products = Product.query.join(Shop)\
+        .filter(Shop.is_active == True)\
+        .order_by(Product.rating.desc(), Product.created_at.desc())\
+        .limit(3).all()  # Limit to 3 products as shown in the static example
+    
+    return render_template('main/home.html', 
+                         featured_shops=featured_shops,
+                         featured_products=featured_products,
+                         current_date="May 5, 2025")
 
 @main_bp.route('/about')
 def about():
@@ -30,37 +44,212 @@ def about():
 def projects():
     return render_template('main/projects.html')
 
-@main_bp.route('/checkout')
+@main_bp.route('/checkout', methods=['GET', 'POST'])
 @login_required
 @customer_required
 def checkout():
-    init_cart()
-    cart = session.get('cart', {})
-    if not cart:
+    cart = get_or_create_cart()
+    if isinstance(cart, dict) and not cart:  # Empty session cart
         return render_template('main/checkout.html', cart_items=[])
-    
+    elif not isinstance(cart, dict) and not cart.items:  # Empty database cart
+        return render_template('main/checkout.html', cart_items=[])
+
+    if request.method == 'POST':
+        # Get form data
+        delivery_address = request.form.get('address', '').strip()
+        latitude = request.form.get('latitude', type=float)
+        longitude = request.form.get('longitude', type=float)
+        payment_method = request.form.get('payment_method', 'cod')
+        notes = request.form.get('notes', '').strip()
+        
+        # Validate delivery address
+        if not delivery_address:
+            flash('Please provide a delivery address.', 'error')
+            return redirect(url_for('main.checkout'))
+            
+        # Only validate coordinates if they are provided
+        if latitude is not None and longitude is not None:
+            if not (-90 <= latitude <= 90) or not (-180 <= longitude <= 180):
+                flash('Invalid coordinates provided. Please enter a valid address.', 'error')
+                return redirect(url_for('main.checkout'))
+
+        try:
+            # Group items by shop
+            shop_orders = {}
+            
+            # Handle database cart
+            if not isinstance(cart, dict):
+                for cart_item in cart.items:
+                    product = cart_item.product
+                    if not product:
+                        continue
+                        
+                    if product.shop_id not in shop_orders:
+                        shop_orders[product.shop_id] = []
+                        
+                    shop_orders[product.shop_id].append({
+                        'product': product,
+                        'quantity': cart_item.quantity,
+                        'price': cart_item.negotiated_price or product.price
+                    })
+            # Handle session cart
+            else:
+                for product_id, item in cart.items():
+                    product = Product.query.get(product_id)
+                    if not product:
+                        continue
+                        
+                    if product.shop_id not in shop_orders:
+                        shop_orders[product.shop_id] = []
+                        
+                    shop_orders[product.shop_id].append({
+                        'product': product,
+                        'quantity': item['quantity'],
+                        'price': item['price']
+                    })
+
+            # Create separate orders for each shop
+            orders = []
+            for shop_id, items in shop_orders.items():
+                order = Order(
+                    customer_id=current_user.id,
+                    shop_id=shop_id,
+                    status='pending',
+                    payment_method=payment_method,
+                    special_instructions=notes
+                )
+
+                # Set delivery address if provided
+                if delivery_address:
+                    order.delivery_address = delivery_address
+                    order.delivery_lat = latitude
+                    order.delivery_lng = longitude
+
+                # Add items to order and calculate total
+                total_amount = 0
+                for item in items:
+                    order_item = OrderItem(
+                        product_id=item['product'].id,
+                        quantity=item['quantity'],
+                        price=item['price'],
+                        shop_id=shop_id
+                    )
+                    order.items.append(order_item)
+                    total_amount += item['quantity'] * item['price']
+                    
+                    # Update product stock
+                    item['product'].stock -= item['quantity']
+
+                order.total_amount = total_amount
+                db.session.add(order)
+                orders.append(order)
+
+            # Clear cart
+            if not isinstance(cart, dict):
+                for item in cart.items:
+                    db.session.delete(item)
+            else:
+                session['cart'] = {}
+
+            db.session.commit()
+
+            # Send notifications
+            for order in orders:
+                notify_shop_owner_new_order(order)
+                notify_customer_order_status(order)
+                notify_admin_order_status(order, {
+                    'old': None,
+                    'new': 'pending',
+                    'action': 'order_created'
+                })
+
+            flash('Orders placed successfully!', 'success')
+            # Redirect to the first order if multiple orders were created
+            return redirect(url_for('user.order_detail', order_id=orders[0].id))
+
+        except ValueError as e:
+            db.session.rollback()
+            flash(str(e), 'error')
+            return redirect(url_for('main.checkout'))
+        except Exception as e:
+            db.session.rollback()
+            flash('An error occurred while placing your order. Please try again. If the problem persists, contact support.', 'error')
+            print(f'Error placing order: {str(e)}')  # Log the actual error
+            return redirect(url_for('main.checkout'))
+
+    # GET request - show checkout form
     cart_items = []
     total = 0
-    for product_id, item in cart.items():
-        product = Product.query.get(product_id)
-        if product:
-            subtotal = item['quantity'] * item['price']
-            cart_items.append({
-                'product': product,
-                'quantity': item['quantity'],
-                'price': item['price'],
-                'subtotal': subtotal
-            })
-            total += subtotal
     
+    # Handle database cart
+    if not isinstance(cart, dict):
+        for cart_item in cart.items:
+            product = cart_item.product
+            if product:
+                price = cart_item.negotiated_price or product.price
+                subtotal = price * cart_item.quantity
+                cart_items.append({
+                    'product': product,
+                    'quantity': cart_item.quantity,
+                    'price': price,
+                    'subtotal': subtotal
+                })
+                total += subtotal
+    # Handle session cart
+    else:
+        for product_id, item in cart.items():
+            product = Product.query.get(product_id)
+            if product:
+                subtotal = item['quantity'] * item['price']
+                cart_items.append({
+                    'product': product,
+                    'quantity': item['quantity'],
+                    'price': item['price'],
+                    'subtotal': subtotal
+                })
+                total += subtotal
+
     return render_template('main/checkout.html', cart_items=cart_items, total=total)
 
 @main_bp.route('/cart')
 @login_required
 @customer_required
 def cart():
-    init_cart()
-    return render_template('main/cart.html')
+    cart = get_or_create_cart()
+    cart_items = []
+    total = 0
+    
+    # Handle database cart
+    if not isinstance(cart, dict):
+        for cart_item in cart.items:
+            product = cart_item.product
+            if product:
+                price = cart_item.negotiated_price or product.price
+                subtotal = price * cart_item.quantity
+                cart_items.append({
+                    'product': product,
+                    'quantity': cart_item.quantity,
+                    'price': price,
+                    'subtotal': subtotal,
+                    'negotiated': cart_item.negotiated_price is not None
+                })
+                total += subtotal
+    # Handle session cart
+    else:
+        for product_id, item in cart.items():
+            product = Product.query.get(product_id)
+            if product:
+                subtotal = item['quantity'] * item['price']
+                cart_items.append({
+                    'product': product,
+                    'quantity': item['quantity'],
+                    'price': item['price'],
+                    'subtotal': subtotal,
+                    'negotiated': False
+                })
+                total += subtotal
+    
+    return render_template('main/cart.html', cart_items=cart_items, total=total)
 
 @main_bp.route('/static/images/<path:filename>')
 def serve_image(filename):

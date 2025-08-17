@@ -9,18 +9,24 @@ class Order(db.Model):
     status = db.Column(db.String(20), nullable=False, default='pending')
     total_amount = db.Column(db.Float, nullable=False, default=0.0)
     delivery_fee = db.Column(db.Float, nullable=False, default=5.0)  # Default delivery fee
-    delivery_address = db.Column(db.String(200), nullable=False)
-    delivery_lat = db.Column(db.Float)
-    delivery_lng = db.Column(db.Float)
+    delivery_address = db.Column(db.String(200), nullable=True)  # Made nullable
+    delivery_lat = db.Column(db.Float, nullable=True)  # Made nullable for consistency
+    delivery_lng = db.Column(db.Float, nullable=True)  # Made nullable for consistency
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     estimated_delivery_time = db.Column(db.DateTime)
     special_instructions = db.Column(db.Text)
     
-    # Relationships
+    # Payment fields
+    payment_method = db.Column(db.String(20), nullable=False, default='cod')  # cod, bkash, nagad, card
+    payment_status = db.Column(db.String(20), nullable=False, default='pending')  # pending, paid, failed
+    payment_details = db.Column(db.JSON)  # Store payment method specific details
+    payment_transaction_id = db.Column(db.String(100))  # For online payments
+      # Relationships
     items = db.relationship('OrderItem', backref='order', lazy=True, cascade='all, delete-orphan')
     customer = db.relationship('User', foreign_keys=[customer_id])
     delivery_person = db.relationship('User', foreign_keys=[delivery_person_id], backref='delivery_orders')
+    shop = db.relationship('Shop', foreign_keys=[shop_id], backref='orders')
     
     def __init__(self, **kwargs):
         super(Order, self).__init__(**kwargs)
@@ -55,8 +61,14 @@ class Order(db.Model):
         
         return True
 
+    @property
+    def subtotal(self):
+        """Calculate subtotal (sum of all items before delivery fee)"""
+        return sum((item.negotiated_price or item.price) * item.quantity for item in self.items)
+        
     def calculate_total(self):
-        self.total_amount = sum(item.subtotal for item in self.items)
+        """Calculate total amount including delivery fee"""
+        self.total_amount = self.subtotal + self.delivery_fee
         return self.total_amount
 
     def to_dict(self):
@@ -76,6 +88,10 @@ class Order(db.Model):
             'updated_at': self.updated_at.isoformat(),
             'estimated_delivery_time': self.estimated_delivery_time.isoformat() if self.estimated_delivery_time else None,
             'special_instructions': self.special_instructions,
+            'payment_method': self.payment_method,
+            'payment_status': self.payment_status,
+            'payment_details': self.payment_details,
+            'payment_transaction_id': self.payment_transaction_id,
             'items': [item.to_dict() for item in self.items]
         }
 
@@ -92,14 +108,27 @@ class OrderItem(db.Model):
     
     @property
     def subtotal(self):
+        """Calculate subtotal for this item (price * quantity)"""
         return (self.negotiated_price or self.price) * self.quantity
 
     def to_dict(self):
         return {
             'id': self.id,
-            'product': self.product.to_dict(),
+            'product': self.product.to_dict() if self.product else None,
             'quantity': self.quantity,
             'price': self.price,
             'negotiated_price': self.negotiated_price,
             'subtotal': self.subtotal
         }
+
+class OrderNote(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    order_id = db.Column(db.Integer, db.ForeignKey('order.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    order = db.relationship('Order', backref='notes')
+    user = db.relationship('User', backref='order_notes')

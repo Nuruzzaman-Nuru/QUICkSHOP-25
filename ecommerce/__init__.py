@@ -2,6 +2,8 @@ from flask import Flask, render_template
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager
 from flask_mail import Mail
+from flask_wtf import CSRFProtect
+from flask_migrate import Migrate
 from .config import config
 import logging
 from logging.handlers import RotatingFileHandler
@@ -12,6 +14,8 @@ import json
 db = SQLAlchemy()
 login_manager = LoginManager()
 mail = Mail()
+csrf = CSRFProtect()
+migrate = Migrate()
 
 def create_app(config_name='default'):
     app = Flask(__name__)
@@ -21,8 +25,10 @@ def create_app(config_name='default'):
     
     # Initialize extensions with app
     db.init_app(app)
+    migrate.init_app(app, db)
     login_manager.init_app(app)
     mail.init_app(app)
+    csrf.init_app(app)
     
     # Configure login
     login_manager.login_view = 'auth.login'

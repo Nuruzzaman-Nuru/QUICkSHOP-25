@@ -30,9 +30,20 @@
                     </div>
                     <div class="col-md-6">
                         <p><strong>Delivery Address:</strong><br>
-                        {{ order.delivery_address }}</p>
+                        {% if order.delivery_address %}
+                            {{ order.delivery_address }}
+                        {% else %}
+                            <span class="text-muted">No delivery address specified</span>
+                        {% endif %}
+                        </p>
                         
-                        {% if order.status == 'in_delivery' %}
+                        {% if order.status in ['pending', 'confirmed'] %}
+                        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#updateAddressModal">
+                            {% if order.delivery_address %}Update{% else %}Add{% endif %} Delivery Address
+                        </button>
+                        {% endif %}
+                        
+                        {% if order.status == 'delivering' %}
                         <a href="{{ url_for('user.track_order', order_id=order.id) }}" 
                            class="btn btn-info">Track Order</a>
                         {% endif %}
@@ -102,4 +113,122 @@
         </div>
     </div>
 </div>
+
+<!-- Update Address Modal -->
+<div class="modal fade" id="updateAddressModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Update Delivery Address</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label for="address" class="form-label">Delivery Address</label>
+                    <input type="text" class="form-control" id="address" 
+                           value="{{ order.delivery_address }}" required>
+                    <div id="map" style="height: 300px; margin-top: 10px;"
+                         data-lat="{{ order.delivery_lat }}"
+                         data-lng="{{ order.delivery_lng }}"
+                         data-default-lat="{{ config.DEFAULT_LAT|default(0) }}"
+                         data-default-lng="{{ config.DEFAULT_LNG|default(0) }}"></div>
+                    <input type="hidden" id="latitude" value="{{ order.delivery_lat or '' }}">
+                    <input type="hidden" id="longitude" value="{{ order.delivery_lng or '' }}">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="updateAddress()">Save Changes</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://maps.googleapis.com/maps/api/js?key={{ config.GOOGLE_MAPS_API_KEY }}&libraries=places"></script>
+<script>
+let map;
+let marker;
+
+function initMap() {
+    const mapDiv = document.getElementById('map');
+    const lat = Number(mapDiv.dataset.lat) || Number(mapDiv.dataset.defaultLat);
+    const lng = Number(mapDiv.dataset.lng) || Number(mapDiv.dataset.defaultLng);
+
+    map = new google.maps.Map(mapDiv, {
+        center: { lat, lng },
+        zoom: 15
+    });
+
+    marker = new google.maps.Marker({
+        position: { lat, lng },
+        map: map,
+        draggable: true
+    });
+
+    // Initialize autocomplete
+    const input = document.getElementById('address');
+    const autocomplete = new google.maps.places.Autocomplete(input);
+    
+    autocomplete.addListener('place_changed', function() {
+        const place = autocomplete.getPlace();
+        if (place.geometry) {
+            map.setCenter(place.geometry.location);
+            marker.setPosition(place.geometry.location);
+            document.getElementById('latitude').value = place.geometry.location.lat();
+            document.getElementById('longitude').value = place.geometry.location.lng();
+        }
+    });
+
+    marker.addListener('dragend', function() {
+        const pos = marker.getPosition();
+        document.getElementById('latitude').value = pos.lat();
+        document.getElementById('longitude').value = pos.lng();
+        
+        // Reverse geocode to update address field
+        const geocoder = new google.maps.Geocoder();
+        geocoder.geocode({ location: pos }, function(results, status) {
+            if (status === 'OK' && results[0]) {
+                document.getElementById('address').value = results[0].formatted_address;
+            }
+        });
+    });
+}
+
+function updateAddress() {
+    const address = document.getElementById('address').value;
+    const latitude = document.getElementById('latitude').value;
+    const longitude = document.getElementById('longitude').value;
+    
+    if (!address || !latitude || !longitude) {
+        alert('Please enter a valid delivery address');
+        return;
+    }
+    
+    const formData = new FormData();
+    formData.append('address', address);
+    formData.append('latitude', latitude);
+    formData.append('longitude', longitude);
+    
+    fetch(`/user/order/{{ order.id }}/update-address`, {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success') {
+            location.reload();
+        } else {
+            alert(data.message || 'Error updating delivery address');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error updating delivery address');
+    });
+}
+
+document.addEventListener('DOMContentLoaded', initMap);
+</script>
 {% endblock %}

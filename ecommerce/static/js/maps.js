@@ -1,89 +1,91 @@
+// Maps initialization and location handling
 function initMap() {
-    const mapContainer = document.getElementById('map');
-    const mapLoading = document.getElementById('mapLoading');
-    const mapError = document.getElementById('mapError');
+    const mapDiv = document.getElementById('map');
+    const addressInput = document.getElementById('address');
+    const latInput = document.getElementById('latitude');
+    const lngInput = document.getElementById('longitude');
+    const form = document.querySelector('form');
 
-    if (!mapContainer) return;
+    // If no map or related elements exist, exit gracefully
+    if (!mapDiv || !addressInput) return;
 
-    try {
-        // Hide error message if it was previously shown
-        mapError.style.display = 'none';
-        
-        // Create the map centered on the search location
-        const map = new google.maps.Map(mapContainer, {
-            zoom: 13,
-            center: { 
-                lat: searchLocation.lat,
-                lng: searchLocation.lng 
-            },
-            mapTypeControl: false,
-            fullscreenControl: false,
-            streetViewControl: false,
-            styles: [
-                {
-                    featureType: "poi",
-                    elementType: "labels",
-                    stylers: [{ visibility: "off" }]
+    // Remove form validation for coordinates        // Form validation - allow submission without coordinates
+        if (form) {
+            form.addEventListener('submit', function(e) {
+                // Always allow form submission - coordinates are optional
+                if (!latInput.value || !lngInput.value) {
+                    console.log('Submitting without coordinates');
                 }
-            ]
+                return true;
+            });
+        }// If the page has a map, initialize it with optional functionality
+    if (mapDiv) {
+        // Default to Dhaka, Bangladesh coordinates
+        const defaultLocation = { lat: 23.8103, lng: 90.4125 };
+        
+        // Initialize map even if no coordinates are provided
+        const map = new google.maps.Map(mapDiv, {
+            zoom: 13,
+            center: defaultLocation,
+            mapTypeControl: false,
+            gestureHandling: 'cooperative'
         });
 
-        // Add a marker for the search location
-        new google.maps.Marker({
-            position: searchLocation,
+        const marker = new google.maps.Marker({
             map: map,
-            icon: {
-                path: google.maps.SymbolPath.CIRCLE,
-                scale: 10,
-                fillColor: "#4285F4",
-                fillOpacity: 0.5,
-                strokeWeight: 2,
-                strokeColor: "#1967D2"
-            },
-            title: "Your Location"
+            position: defaultLocation,
+            draggable: true
         });
 
-        // Add markers for each shop
-        shopLocations.forEach(shop => {
-            const marker = new google.maps.Marker({
-                position: { lat: shop.lat, lng: shop.lng },
-                map: map,
-                title: shop.name,
-                animation: google.maps.Animation.DROP
-            });
+        // Initialize Places Autocomplete if address input exists
+        if (addressInput) {
+            const autocomplete = new google.maps.places.Autocomplete(addressInput);
+            autocomplete.bindTo('bounds', map);            // Handle place selection (optional)
+            autocomplete.addListener('place_changed', function() {
+                const place = autocomplete.getPlace();
+                
+                // If a valid place is selected, update the map
+                if (place.geometry) {
+                    if (place.geometry.viewport) {
+                        map.fitBounds(place.geometry.viewport);
+                    } else {
+                        map.setCenter(place.geometry.location);
+                        map.setZoom(17);
+                    }
 
-            // Create an info window for the shop
-            const infoWindow = new google.maps.InfoWindow({
-                content: `
-                    <div class="map-info-window">
-                        <h6>${shop.name}</h6>
-                        <div class="distance">${shop.distance} km away</div>
-                        <a href="/shop/${shop.id}" class="btn btn-primary btn-sm">View Shop</a>
-                    </div>
-                `
+                    marker.setPosition(place.geometry.location);
+                    if (latInput && lngInput) {
+                        latInput.value = place.geometry.location.lat();
+                        lngInput.value = place.geometry.location.lng();
+                    }
+                    addressInput.value = place.formatted_address;
+                } else {
+                    // Still allow manual address entry
+                    console.log('Using manual address entry');
+                }
             });
-
-            // Add click listener to show info window
-            marker.addListener('click', () => {
-                infoWindow.open(map, marker);
-            });
-        });
-
-        // Hide loading spinner
-        if (mapLoading) {
-            mapLoading.style.display = 'none';
         }
-    } catch (error) {
-        console.error('Error initializing map:', error);
-        if (mapError) {
-            mapError.style.display = 'block';
-        }
-        if (mapLoading) {
-            mapLoading.style.display = 'none';
+
+        // Handle marker drag if coordinate inputs exist
+        if (latInput && lngInput) {
+            marker.addListener('dragend', function() {
+                const position = marker.getPosition();
+                latInput.value = position.lat();
+                lngInput.value = position.lng();
+                
+                // Update address using reverse geocoding
+                const geocoder = new google.maps.Geocoder();
+                geocoder.geocode({ location: position }, function(results, status) {
+                    if (status === 'OK' && results[0]) {
+                        addressInput.value = results[0].formatted_address;
+                    }
+                });
+            });
         }
     }
 }
 
+// Location input initialization for other pages
 function initLocationInput() {
     const useLocationSwitch = document.getElementById('useLocation');
     const locationFields = document.getElementById('locationFields');

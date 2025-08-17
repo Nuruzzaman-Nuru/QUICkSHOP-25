@@ -34,17 +34,18 @@
         <div class="col-md-4">
             <!-- Location Section -->
             <div class="card mb-3">
-                <div class="card-body">
-                    <h6 class="card-title">Shipping Address</h6>
+                <div class="card-body">                    
+                    <h6 class="card-title">Shipping Address (Optional)</h6>
                     <div class="d-flex align-items-center">
                         <i class="bi bi-geo-alt text-primary me-2"></i>
                         <div id="shippingAddressDisplay" class="flex-grow-1">
-                            <span class="text-muted">Select a delivery address</span>
+                            <span class="text-muted">Add a delivery address (optional)</span>
                         </div>
                         <button class="btn btn-sm btn-outline-primary ms-2" data-bs-toggle="modal" data-bs-target="#addressModal">
                             Change
                         </button>
                     </div>
+                    <small class="text-muted d-block mt-2">You can also add your address during checkout</small>
                 </div>
             </div>
 
@@ -52,6 +53,8 @@
             <div class="card">
                 <div class="card-body">
                     <h5 class="card-title">Order Summary</h5>
+                    
+                    <!-- Order Details -->
                     <div class="d-flex justify-content-between mb-2">
                         <span>Subtotal:</span>
                         <span id="subtotal">৳0.00</span>
@@ -74,12 +77,47 @@
                         <div id="voucherMessage" class="form-text"></div>
                     </div>
 
+                    <!-- Payment Method -->
+                    <div class="mb-3">
+                        <h6 class="mb-2">Select Payment Method</h6>
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="radio" name="payment_method" 
+                                   id="cod" value="cod" checked>
+                            <label class="form-check-label" for="cod">
+                                Cash on Delivery
+                            </label>
+                        </div>
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="radio" name="payment_method" 
+                                   id="bkash" value="bkash">
+                            <label class="form-check-label d-flex align-items-center" for="bkash">
+                                <img src="{{ url_for('static', filename='images/payments/bkash.png') }}" 
+                                     alt="bKash" height="20" class="me-2"> bKash
+                            </label>
+                        </div>
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="radio" name="payment_method" 
+                                   id="nagad" value="nagad">
+                            <label class="form-check-label d-flex align-items-center" for="nagad">
+                                <img src="{{ url_for('static', filename='images/payments/nagad.png') }}" 
+                                     alt="Nagad" height="20" class="me-2"> Nagad
+                            </label>
+                        </div>
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="radio" name="payment_method" 
+                                   id="card" value="card">
+                            <label class="form-check-label" for="card">
+                                Credit/Debit Card
+                            </label>
+                        </div>
+                    </div>
+
                     <div class="d-flex justify-content-between border-top pt-2 mb-3">
                         <strong>Total:</strong>
                         <strong id="total">৳0.00</strong>
                     </div>
 
-                    <div class="d-grid">
+                    <div class="d-grid gap-2">
                         <button id="checkoutBtn" class="btn btn-primary" onclick="proceedToCheckout()" disabled>
                             PROCEED TO CHECKOUT (0)
                         </button>
@@ -351,10 +389,18 @@ function updateOrderSummary() {
         });
 }
 
-document.getElementById('checkoutBtn').addEventListener('click', function() {
+document.getElementById('checkoutBtn').addEventListener('click', function(e) {
+    e.preventDefault();
     const selectedProducts = JSON.parse(sessionStorage.getItem('selectedProducts') || '[]');
     if (!selectedProducts.length) {
         alert('Please select items to checkout');
+        return;
+    }
+      const addressDisplay = document.getElementById('shippingAddressDisplay').textContent.trim();
+    
+    if (addressDisplay.includes('Add a delivery address')) {
+        alert('Please add a delivery address before proceeding to checkout');
+        document.getElementById('addressModal').modal('show');
         return;
     }
     
@@ -375,6 +421,12 @@ document.getElementById('checkoutBtn').addEventListener('click', function() {
                 },
                 body: JSON.stringify({
                     selected_items: selectedProducts,
+                    shipping: {
+                        address: data.address,
+                        lat: parseFloat(addressLat),
+                        lng: parseFloat(addressLng)
+                    },
+                    payment_method: selectedPaymentMethod,
                     special_instructions: ''
                 })
             })
@@ -383,18 +435,23 @@ document.getElementById('checkoutBtn').addEventListener('click', function() {
                 if (data.status === 'success') {
                     // Clear selected products
                     sessionStorage.removeItem('selectedProducts');
+                    sessionStorage.removeItem('selectedPaymentMethod');
                     
                     // Show success message and redirect to orders page
                     alert('Order placed successfully!');
                     window.location.href = '{{ url_for('user.orders') }}';
                 } else {
-                    alert(data.message || 'Error placing order');
+                    alert(data.message || 'Error placing order. Please check your delivery address and try again.');
                 }
             })
             .catch(error => {
                 console.error('Error:', error);
-                alert('Error placing order');
+                alert('Error placing order. Please try again.');
             });
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error retrieving shipping address. Please try again.');
         });
 });
 
@@ -594,14 +651,8 @@ document.getElementById('saveAddress').addEventListener('click', function() {
         document.getElementById('state').value,
         document.getElementById('zipCode').value
     ];
-    
-    const lat = document.getElementById('addressLat').value;
+      const lat = document.getElementById('addressLat').value;
     const lng = document.getElementById('addressLng').value;
-    
-    if (!lat || !lng) {
-        alert('Please select a valid address from the suggestions');
-        return;
-    }
     
     fetch('/api/cart/shipping-address', {
         method: 'POST',
@@ -626,6 +677,18 @@ document.getElementById('saveAddress').addEventListener('click', function() {
     .catch(error => {
         console.error('Error:', error);
         alert('Error saving address');
+    });
+});
+
+// Store selected payment method
+let selectedPaymentMethod = 'cod';  // Default to Cash on Delivery
+
+// Handle payment method selection
+document.querySelectorAll('input[name="payment_method"]').forEach(input => {
+    input.addEventListener('change', function() {
+        selectedPaymentMethod = this.value;
+        // Store payment method in sessionStorage to persist between cart and checkout
+        sessionStorage.setItem('selectedPaymentMethod', selectedPaymentMethod);
     });
 });
 

@@ -24,6 +24,16 @@ class Config:
     
     # TinyMCE configuration
     TINYMCE_API_KEY = os.getenv('TINYMCE_API_KEY', 'your-api-key-here')
+    
+    # Twilio configuration
+    TWILIO_ACCOUNT_SID = os.getenv('TWILIO_ACCOUNT_SID')
+    TWILIO_AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN')
+    TWILIO_PHONE_NUMBER = os.getenv('TWILIO_PHONE_NUMBER')
+    
+    # Security settings
+    WTF_CSRF_ENABLED = True
+    WTF_CSRF_SECRET_KEY = 'your-csrf-secret-key-here'  # Change this in production
+    WTF_CSRF_TIME_LIMIT = 3600  # 1 hour
 
 class DevelopmentConfig(Config):
     DEBUG = True

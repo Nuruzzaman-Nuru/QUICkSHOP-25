@@ -10,6 +10,7 @@
                 </div>
                 <div class="card-body">
                     <form id="editProductForm" method="POST" action="{{ url_for('shop.update_product', product_id=product.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                         <div class="mb-3">
                             <label class="form-label">Product Name</label>
                             <input type="text" class="form-control" name="name" value="{{ product.name }}" required>

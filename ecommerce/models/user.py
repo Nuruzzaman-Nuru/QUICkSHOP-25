@@ -9,12 +9,14 @@ class User(UserMixin, db.Model):
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(128))
     role = db.Column(db.String(20), nullable=False, default='user')  # user, shop_owner, delivery, admin
+    phone = db.Column(db.String(20))  # Added phone number field
     location_lat = db.Column(db.Float)
     location_lng = db.Column(db.Float)
     address = db.Column(db.String(200))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     is_active = db.Column(db.Boolean, default=True)
+    email_notifications = db.Column(db.Boolean, default=True)
     
     # Relationships
     orders = db.relationship('Order', lazy=True, foreign_keys='Order.customer_id')
@@ -51,12 +53,19 @@ class User(UserMixin, db.Model):
     def is_admin(self):
         return self.role == 'admin'
 
+    @property
+    def settings(self):
+        return {
+            'email_notifications': self.email_notifications
+        }
+
     def to_dict(self):
         return {
             'id': self.id,
             'username': self.username,
             'email': self.email,
             'role': self.role,
+            'phone': self.phone,  # Added phone number field to dictionary
             'location': {
                 'lat': self.location_lat,
                 'lng': self.location_lng,

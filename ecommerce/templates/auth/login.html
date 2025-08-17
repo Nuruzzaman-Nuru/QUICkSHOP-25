@@ -23,11 +23,26 @@
                             {% endif %}
                         {% endwith %}
                         
-                        <form method="POST">
+                        <form method="POST" action="{{ url_for('auth.login') }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                             <div class="mb-4">
-                                <label for="username" class="form-label">Username</label>
-                                <input type="text" class="form-control" id="username" name="username" required 
-                                       value="{{ request.form.username }}" placeholder="Enter your username">
+                                <label for="role" class="form-label">Select User Role</label>
+                                <select class="form-select" id="role" name="role" required>
+                                    <option value="" selected disabled>Choose your role...</option>
+                                    <option value="user">Customer</option>
+                                    <option value="shop_owner">Shop Owner</option>
+                                    <option value="delivery">Delivery Person</option>
+                                </select>
+                                <div class="text-center mt-2">
+                                    <small><a href="{{ url_for('auth.admin_login') }}" class="text-muted">Admin Login</a></small>
+                                </div>
+                            </div>
+                            <div class="mb-4">
+                                <label for="user_id" class="form-label">User ID or Username</label>
+                                <input type="text" class="form-control" id="user_id" name="user_id" required 
+                                       value="{{ request.form.user_id or session.get('registered_user_id', '') }}" 
+                                       placeholder="Enter your User ID (#123) or username">
+                                <small class="form-text text-muted">You can login with your User ID (#123) or username</small>
                             </div>
                             <div class="mb-4">
                                 <label for="password" class="form-label">Password</label>

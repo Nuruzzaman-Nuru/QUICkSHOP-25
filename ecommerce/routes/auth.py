@@ -1,5 +1,6 @@
-from flask import Blueprint, render_template, redirect, url_for, flash, request, current_app
+from flask import Blueprint, render_template, redirect, url_for, flash, request, current_app, session
 from flask_login import login_user, logout_user, login_required, current_user
+from flask_wtf.csrf import generate_csrf
 from werkzeug.security import generate_password_hash
 from functools import wraps
 from ..models.user import User
@@ -84,35 +85,83 @@ def admin_login():
 
 @auth_bp.route('/register', methods=['GET', 'POST'])
 def register():
+    # Clear any existing flash messages
+    session.pop('_flashes', None)
+    
     if request.method == 'POST':
         username = request.form.get('username')
         email = request.form.get('email')
         password = request.form.get('password')
-        role = request.form.get('role', 'user')  # Default role is 'user'
+        confirm_password = request.form.get('confirm_password')
+        role = request.form.get('role')
+        phone = request.form.get('phone')
+        address = request.form.get('address')
         
         # Validate role selection
         allowed_roles = ['user', 'shop_owner', 'delivery']
-        if role not in allowed_roles:
-            flash('Invalid role selected.', 'error')
-            return redirect(url_for('auth.register'))
+        if not role or role not in allowed_roles:
+            flash('Please select a valid role.', 'error')
+            return render_template('auth/register.html')
 
+        # Validate required fields
+        if not all([username, email, password, confirm_password, phone, address]):
+            flash('All fields are required.', 'error')
+            return render_template('auth/register.html')
+
+        # Validate password match
+        if password != confirm_password:
+            flash('Passwords do not match.', 'error')
+            return render_template('auth/register.html')
+
+        # Check if username or email already exists
         if User.query.filter_by(username=username).first():
             flash('Username already exists.', 'error')
-            return redirect(url_for('auth.register'))
-            
+            return render_template('auth/register.html')
+
         if User.query.filter_by(email=email).first():
             flash('Email already registered.', 'error')
-            return redirect(url_for('auth.register'))
+            return render_template('auth/register.html')
 
-        user = User(username=username, email=email, role=role)
-        user.set_password(password)
-        
-        db.session.add(user)
-        db.session.commit()
-        
-        flash('Registration successful! Please login.', 'success')
-        return redirect(url_for('auth.login'))
-        
+        try:
+            # Create new user
+            user = User(username=username, email=email, role=role)
+            user.set_password(password)
+            user.phone = phone
+            user.address = address
+            user.created_at = datetime.utcnow()
+            
+            db.session.add(user)
+            db.session.commit()
+
+            # Clear any existing messages before showing success
+            session.pop('_flashes', None)
+            
+            # Generate confirmation message with user details
+            confirmation_msg = f"""
+            <div class='registration-details'>
+                <h4>Registration Successful!</h4>
+                <div class='info-box p-3 bg-light rounded'>
+                    <p><strong>User ID:</strong> #{user.id}</p>
+                    <p><strong>Username:</strong> {user.username}</p>
+                    <p><strong>Password:</strong> {password}</p>
+                </div>
+                <p class='mt-3'><strong>Please save these details for future reference.</strong></p>
+                <p class='text-muted'>You can log in using these credentials below.</p>
+            </div>"""
+            flash(confirmation_msg, 'success')
+            
+            # Store user ID in session for the login form
+            session['registered_user_id'] = user.id
+            
+            # Show success page with embedded login form
+            return render_template('auth/register_success.html')
+            
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f'Registration error: {str(e)}')
+            flash('Error creating account. Please try again.', 'error')
+            return render_template('auth/register.html')
+    
     return render_template('auth/register.html')
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
@@ -121,27 +170,40 @@ def login():
         return redirect(get_role_dashboard(current_user.role))
         
     if request.method == 'POST':
-        username = request.form.get('username')
+        user_id = request.form.get('user_id')
         password = request.form.get('password')
-        remember = request.form.get('remember', False)
+        role = request.form.get('role')
+        remember = request.form.get('remember', False) == 'on'
         
-        user = User.query.filter_by(username=username).first()
+        if not role:
+            flash('Please select your user role.', 'error')
+            return render_template('auth/login.html')
+
+        # Try to find user by ID (if input starts with #)
+        user = None
+        if user_id.startswith('#'):
+            try:
+                id_num = int(user_id[1:])  # Remove '#' and convert to int
+                user = User.query.filter_by(id=id_num, role=role).first()
+            except (ValueError, TypeError):
+                pass
+                
+        # If not found by ID, try username
+        if not user:
+            user = User.query.filter_by(username=user_id, role=role).first()
         
         if not user or not user.check_password(password):
-            flash('Invalid username or password.', 'error')
+            flash('Invalid User ID/username or password for the selected role.', 'error')
             return render_template('auth/login.html')
-            
-        if user.role == 'admin':
-            flash('Please use the admin login page.', 'error')
-            return redirect(url_for('auth.admin_login'))
             
         login_user(user, remember=remember)
         next_page = request.args.get('next')
+        
         if not next_page or not next_page.startswith('/'):
             next_page = get_role_dashboard(user.role)
-        flash(f'Welcome back, {user.username}!', 'success')
-        return redirect(next_page)
             
+        return redirect(next_page)
+        
     return render_template('auth/login.html')
 
 @auth_bp.route('/forgot-password', methods=['GET', 'POST'])
@@ -214,28 +276,28 @@ def logout():
 @login_required
 def profile():
     if request.method == 'POST':
+        username = request.form.get('username')
+        email = request.form.get('email')
+        address = request.form.get('address')
         lat = request.form.get('latitude')
         lng = request.form.get('longitude')
-        address = request.form.get('address')
-        
-        if not address:
-            flash('Address is required', 'error')
-            return redirect(url_for('auth.profile'))
-            
+        lat_float = None
+        lng_float = None
+
         try:
-            lat_float = float(lat) if lat else None
-            lng_float = float(lng) if lng else None
+            if lat and lng:
+                lat_float = float(lat)
+                lng_float = float(lng)
             
-            if lat_float is not None and lng_float is not None:
+            if address and lat_float is not None and lng_float is not None:
                 current_user.update_location(lat_float, lng_float, address)
             else:
-                current_user.address = address
+                current_user.address = address or None
                 current_user.location_lat = None
                 current_user.location_lng = None
-            
+                
             db.session.commit()
             flash('Profile updated successfully!', 'success')
-            
         except ValueError:
             flash('Invalid coordinates provided', 'error')
         

@@ -1,0 +1,109 @@
+/* Print styles for order details */
+@media print {
+    /* Hide non-printable elements */
+    header, footer, nav, button, .btn, form, .modal, .no-print {
+        display: none !important;
+    }
+
+    /* Show print-only elements */
+    .d-print-block {
+        display: block !important;
+    }
+
+    /* Reset background colors and borders */
+    body {
+        background: white !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        font-size: 12pt !important;
+        line-height: 1.4 !important;
+    }
+
+    .card {
+        border: none !important;
+        box-shadow: none !important;
+    }
+
+    .card-body {
+        padding: 10px 0 !important;
+    }
+
+    /* Ensure tables are readable */
+    .table {
+        width: 100% !important;
+        border-collapse: collapse !important;
+        page-break-inside: auto !important;
+    }
+
+    .table th,
+    .table td {
+        background: white !important;
+        border: 1px solid #ddd !important;
+        padding: 8px !important;
+    }
+
+    /* Make status badges readable */
+    .badge {
+        padding: 2px 5px !important;
+        border: 1px solid #000 !important;
+        color: #000 !important;
+        background: none !important;
+    }
+
+    /* Print header styling */
+    .print-header {
+        text-align: center;
+        margin-bottom: 30px;
+        padding-bottom: 20px;
+        border-bottom: 2px solid #000;
+    }
+
+    .print-header h2 {
+        margin-bottom: 10px;
+        font-size: 24pt;
+    }
+
+    /* Info sections styling */
+    .print-info {
+        margin-bottom: 20px;
+    }
+
+    .print-info h5 {
+        border-bottom: 1px solid #000;
+        padding-bottom: 5px;
+        margin-bottom: 10px;
+    }
+
+    /* Hide map in print */
+    #map {
+        display: none !important;
+    }
+
+    /* Layout adjustments */
+    .col-md-8 {
+        width: 100% !important;
+        flex: 0 0 100% !important;
+        max-width: 100% !important;
+    }
+
+    .row {
+        display: block !important;
+    }
+
+    /* Format totals section */
+    tfoot tr:last-child {
+        border-top: 2px solid #000 !important;
+        font-weight: bold;
+    }
+
+    /* Ensure proper spacing */
+    p {
+        margin-bottom: 0.5em !important;
+    }
+
+    /* Clean up table appearance */
+    .table-responsive {
+        overflow: visible !important;
+        margin-bottom: 20px !important;
+    }
+}

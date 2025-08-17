@@ -32,26 +32,33 @@
     <!-- Quick Stats -->
     <div class="row mb-4">
         <div class="col-md-3">
-            <div class="card bg-primary text-white">
-                <div class="card-body">
-                    <h5 class="card-title">Total Users</h5>
+            <div class="card bg-primary text-white">                <div class="card-body">                    <h5 class="card-title">Total Users</h5>
                     <p class="display-4">{{ stats.total_users }}</p>
+                    <a href="{{ url_for('admin.manage_users', role='user') }}" class="btn btn-light">View All</a>
                 </div>
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="card bg-success text-white">
-                <div class="card-body">
+        <div class="col-md-3">            <div class="card bg-success text-white">                <div class="card-body">
                     <h5 class="card-title">Active Shops</h5>
                     <p class="display-4">{{ stats.active_shops }}</p>
+                    <a href="{{ url_for('admin.manage_shops') }}" class="btn btn-light">View All</a>
                 </div>
             </div>
         </div>
         <div class="col-md-3">
-            <div class="card bg-warning text-dark">
+            <div class="card bg-purple text-white">
                 <div class="card-body">
+                    <h5 class="card-title">Total Delivery Men</h5>
+                    <p class="display-4">{{ stats.total_delivery }}</p>
+                    <a href="{{ url_for('admin.manage_delivery') }}" class="btn btn-light">View All</a>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-dark">                <div class="card-body">
                     <h5 class="card-title">Pending Orders</h5>
                     <p class="display-4">{{ stats.pending_orders }}</p>
+                    <a href="{{ url_for('admin.orders', status='pending') }}" class="btn btn-light">View All</a>
                 </div>
             </div>
         </div>

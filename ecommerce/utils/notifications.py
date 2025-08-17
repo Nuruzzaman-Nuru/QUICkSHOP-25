@@ -1,4 +1,4 @@
-from flask import current_app, render_template
+from flask import current_app, render_template, url_for
 from flask_mail import Message
 from datetime import datetime, timedelta
 from threading import Thread
@@ -92,16 +92,34 @@ def notify_delivery_person_new_order(order):
         mail.send(msg)
 
 def notify_delivery_assignment(order, delivery_person):
-    """Notify delivery person about being assigned to an order"""
+    """Notify delivery person about new assignment and request confirmation"""
+    subject = f'New Delivery Assignment - Order #{order.id}'
     msg = Message(
-        f'New Delivery Assignment - Order #{order.id}',
+        subject=subject,
         recipients=[delivery_person.email]
     )
+    
+    # Include order details and delivery location in the notification
     msg.html = render_template(
         'email/delivery_assignment.html',
         order=order,
-        delivery_person=delivery_person
+        delivery_person=delivery_person,
+        confirmation_url=url_for(
+            'delivery.confirm_assignment',
+            order_id=order.id,
+            _external=True
+        )
     )
+    
+    # Send SMS notification if phone number is available
+    if delivery_person.phone:
+        try:
+            # Here you would integrate with your SMS service
+            # For example: send_sms(delivery_person.phone, f'New delivery assignment: Order #{order.id}')
+            pass
+        except Exception as e:
+            current_app.logger.error(f'Failed to send SMS to delivery person: {e}')
+    
     mail.send(msg)
 
 def notify_all_delivery_persons(message):

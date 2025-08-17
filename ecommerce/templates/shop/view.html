@@ -100,20 +100,6 @@
     </div>
 </div>
 
-<!-- Toast Container -->
-<div class="toast-container position-fixed bottom-0 end-0 p-3">
-    <div id="addToCartToast" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
-        <div class="toast-header bg-success text-white">
-            <i class="bi bi-check-circle me-2"></i>
-            <strong class="me-auto">Success</strong>
-            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
-        </div>
-        <div class="toast-body">
-            Item added to cart successfully!
-        </div>
-    </div>
-</div>
-
 <!-- Negotiation Modal -->
 <div class="modal fade" id="negotiationModal" tabindex="-1">
     <div class="modal-dialog">
@@ -242,6 +228,32 @@ function loadGoogleMaps() {
 // Start loading Google Maps
 loadGoogleMaps();
 
+// Helper functions for messages
+function showSuccessMessage(message) {
+    Swal.fire({
+        title: 'Success!',
+        text: message,
+        icon: 'success',
+        toast: true,
+        position: 'top-end',
+        showConfirmButton: false,
+        timer: 3000,
+        timerProgressBar: true
+    });
+}
+
+function showErrorMessage(message) {
+    Swal.fire({
+        title: 'Error!',
+        text: message,
+        icon: 'error',
+        toast: true,
+        position: 'top-end',
+        showConfirmButton: false,
+        timer: 3000
+    });
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     // Add to cart handling
     document.querySelectorAll('.add-to-cart').forEach(button => {
@@ -255,6 +267,30 @@ document.addEventListener('DOMContentLoaded', function() {
             // Show add to cart modal
             new bootstrap.Modal(document.getElementById('addToCartModal')).show();
         });
+    });    // Setup offer input validation once
+    const offerInput = document.getElementById('negotiationOffer');
+    const guidance = document.getElementById('offerGuidance');
+    let currentProductPrice = 0;
+
+    offerInput.addEventListener('input', function() {
+        const offer = parseFloat(this.value);
+        if (isNaN(offer) || offer <= 0) {
+            guidance.textContent = 'Please enter a valid amount';
+            guidance.className = 'form-text text-danger';
+            return;
+        }
+        
+        if (offer >= currentProductPrice) {
+            guidance.textContent = 'Your offer should be lower than the current price';
+            guidance.className = 'form-text text-warning';
+        } else if (offer < currentProductPrice * 0.5) {
+            guidance.textContent = 'Your offer might be too low to be accepted';
+            guidance.className = 'form-text text-warning';
+        } else {
+            const discount = ((currentProductPrice - offer) / currentProductPrice * 100).toFixed(1);
+            guidance.textContent = `You're requesting a ${discount}% discount`;
+            guidance.className = 'form-text text-muted';
+        }
     });
 
     // Negotiate button handling
@@ -263,6 +299,9 @@ document.addEventListener('DOMContentLoaded', function() {
             const productId = this.dataset.productId;
             const productName = this.dataset.productName;
             const productPrice = parseFloat(this.dataset.price);
+            
+            // Update current product price for validation
+            currentProductPrice = productPrice;
             
             // Reset negotiation chat
             document.getElementById('negotiationMessages').innerHTML = `
@@ -277,342 +316,160 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('negotiationOriginalPrice').textContent = productPrice.toFixed(2);
             document.getElementById('negotiationProductId').value = productId;
             
-            // Setup offer input guidance
-            const offerInput = document.getElementById('negotiationOffer');
-            const guidance = document.getElementById('offerGuidance');
-            
-            offerInput.value = ''; // Reset input
+            // Reset input
+            offerInput.value = '';
             offerInput.setAttribute('max', productPrice);
-            offerInput.setAttribute('min', productPrice * 0.5); // Assuming 50% as minimum reasonable offer
-            
-            // Add input validation
-            offerInput.addEventListener('input', function() {
-                const offer = parseFloat(this.value);
-                if (isNaN(offer) || offer <= 0) {
-                    guidance.textContent = 'Please enter a valid amount';
-                    guidance.className = 'form-text text-danger';
-                    return;
-                }
-                
-                if (offer >= productPrice) {
-                    guidance.textContent = 'Your offer should be lower than the current price';
-                    guidance.className = 'form-text text-warning';
-                } else if (offer < productPrice * 0.5) {
-                    guidance.textContent = 'Your offer might be too low to be accepted';
-                    guidance.className = 'form-text text-warning';
-                } else {
-                    const discount = ((productPrice - offer) / productPrice * 100).toFixed(1);
-                    guidance.textContent = `You're requesting a ${discount}% discount`;
-                    guidance.className = 'form-text text-muted';
-                }
-            });
+            offerInput.setAttribute('min', productPrice * 0.5);
+            guidance.textContent = 'Make a reasonable offer to start the negotiation';
+            guidance.className = 'form-text text-muted';
             
             // Show modal
             new bootstrap.Modal(document.getElementById('negotiationModal')).show();
         });
     });
-});
 
-// Add to cart handling
-function initializeAddToCartButtons() {
-    document.querySelectorAll('.add-to-cart').forEach(button => {
-        button.addEventListener('click', function() {
-            const productId = this.dataset.productId;
-            const productName = this.dataset.productName;
-            const productPrice = this.dataset.productPrice;
-            
-            document.getElementById('cartProductId').value = productId;
-            document.getElementById('cartProductName').value = productName;
-            document.getElementById('cartProductPrice').value = `$${parseFloat(productPrice).toFixed(2)}`;
-            
-            // Close negotiation modal if open
-            const negotiationModal = bootstrap.Modal.getInstance(document.getElementById('negotiationModal'));
-            if (negotiationModal) {
-                negotiationModal.hide();
+    // Handle add to cart confirmation
+    document.getElementById('confirmAddToCart').addEventListener('click', function() {
+        const productId = document.getElementById('cartProductId').value;
+        const quantity = parseInt(document.getElementById('cartQuantity').value);
+        
+        if (!productId || isNaN(quantity) || quantity < 1) {
+            showErrorMessage('Please enter a valid quantity');
+            return;
+        }
+        
+        const button = this;
+        button.disabled = true;
+        
+        fetch('/api/add', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                product_id: productId,
+                quantity: quantity
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                updateCartCount();
+                // Show success message
+                showSuccessMessage(data.message);
+                // Close modal
+                bootstrap.Modal.getInstance(document.getElementById('addToCartModal')).hide();
+            } else {
+                throw new Error(data.message || 'Failed to add item to cart');
             }
-            
-            // Show add to cart modal
-            new bootstrap.Modal(document.getElementById('addToCartModal')).show();
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showErrorMessage(error.message || 'Error adding item to cart');
+        })
+        .finally(() => {
+            button.disabled = false;
+        });
+    });    // Handle negotiation submission
+    document.getElementById('submitNegotiation').addEventListener('click', function() {
+        const productId = document.getElementById('negotiationProductId').value;
+        const offerInput = document.getElementById('negotiationOffer');
+        const offer = parseFloat(offerInput.value);
+        const messagesDiv = document.getElementById('negotiationMessages');
+        const originalPrice = parseFloat(document.getElementById('negotiationOriginalPrice').textContent);
+        
+        if (!productId || isNaN(offer) || offer <= 0) {
+            showErrorMessage('Please enter a valid offer amount');
+            return;
+        }
+
+        if (offer >= originalPrice) {
+            showErrorMessage('Your offer should be lower than the current price');
+            return;
+        }
+
+        this.disabled = true; // Disable button while processing
+
+        fetch(`/api/product/${productId}/negotiate`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                offered_price: offer
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                const negotiation = data.negotiation;
+                
+                // Add user's offer to chat
+                messagesDiv.insertAdjacentHTML('beforeend', `
+                    <div class="list-group-item">
+                        <strong>You:</strong> I offer ৳${offer.toFixed(2)}
+                    </div>
+                `);                if (negotiation.status === 'accepted') {
+                    // Show acceptance message
+                    messagesDiv.insertAdjacentHTML('beforeend', `
+                        <div class="list-group-item text-success">
+                            <strong>Bot:</strong> Great! We have a deal at ৳${offer.toFixed(2)}!
+                            The item will be added to your cart at the negotiated price.
+                        </div>
+                    `);
+                    // Disable input and submit button
+                    offerInput.disabled = true;
+                    this.disabled = true;
+                    // Show success message and update UI
+                    showSuccessMessage('Price negotiation successful! Item will be added to cart.');
+                    // Close modal and refresh after 2 seconds
+                    setTimeout(() => {
+                        document.querySelector('#negotiationModal .btn-close').click();
+                        updateCartCount();
+                        location.reload(); // Refresh to update prices
+                    }, 2000);
+                } else if (negotiation.status === 'counter_offer') {
+                    // Show counter offer
+                    messagesDiv.insertAdjacentHTML('beforeend', `
+                        <div class="list-group-item">
+                            <strong>Bot:</strong> How about ৳${negotiation.counter_price.toFixed(2)}? 
+                            That's a ${((1 - negotiation.counter_price/negotiation.initial_price) * 100).toFixed(1)}% discount!
+                        </div>
+                    `);
+                    offerInput.value = ''; // Clear input for next offer
+                } else {
+                    // Show rejection message
+                    messagesDiv.insertAdjacentHTML('beforeend', `
+                        <div class="list-group-item text-danger">
+                            <strong>Bot:</strong> I'm sorry, but I cannot accept that offer.
+                        </div>
+                    `);
+                }
+                this.disabled = false; // Re-enable button
+            } else {                showErrorMessage(data.message || 'Error processing negotiation');
+                this.disabled = false;
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showErrorMessage('Error processing negotiation');
+            this.disabled = false;
         });
     });
-}
+});
 
-// Initialize add to cart buttons
-initializeAddToCartButtons();
-
-// Handle add to cart confirmation
-document.getElementById('confirmAddToCart').addEventListener('click', function() {
-    const productId = document.getElementById('cartProductId').value;
-    const quantity = parseInt(document.getElementById('cartQuantity').value);
-    const priceValue = document.getElementById('cartProductPrice').value;
-    const negotiatedPrice = priceValue 
-        ? parseFloat(priceValue.replace(/[৳$]/g, '')) 
-        : null;
-    
-    if (quantity < 1) {
-        alert('Please enter a valid quantity');
-        return;
-    }
-
-    // Disable button to prevent multiple clicks
-    const button = this;
-    button.disabled = true;
-    
-    fetch('/api/add', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-            product_id: productId,
-            quantity: quantity,
-            negotiated_price: negotiatedPrice
-        })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.status === 'success') {
-            // Update cart count in navbar
+function updateCartCount() {
+    fetch('/api/cart/count')
+        .then(response => response.json())
+        .then(data => {
             const cartCountElement = document.getElementById('cartCount');
             if (cartCountElement) {
-                const currentCount = parseInt(cartCountElement.textContent || '0');
-                const newCount = currentCount + quantity;
+                const newCount = data.count || 0;
                 cartCountElement.textContent = newCount;
-                cartCountElement.style.display = 'inline';
-            }
-            
-            // Show success toast
-            const toast = new bootstrap.Toast(document.getElementById('addToCartToast'));
-            document.querySelector('#addToCartToast .toast-body').textContent = 'Item added to cart successfully!';
-            toast.show();
-            
-            // Close modal
-            bootstrap.Modal.getInstance(document.getElementById('addToCartModal')).hide();
-        } else {
-            throw new Error(data.message || 'Failed to add item to cart');
-        }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        alert(error.message || 'Error adding item to cart');
-    })
-    .finally(() => {
-        button.disabled = false;
-    });
-});
-
-// Handle negotiation submission
-document.getElementById('submitNegotiation').addEventListener('click', function() {
-    const productId = document.getElementById('negotiationProductId').value;
-    const offeredPrice = parseFloat(document.getElementById('negotiationOffer').value);
-    
-    if (isNaN(offeredPrice) || offeredPrice <= 0) {
-        alert('Please enter a valid offer amount');
-        return;
-    }
-    
-    fetch(`/api/negotiate/${productId}`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-            offered_price: offeredPrice
-        })
-    })
-    .then(response => response.json())
-    .then(data => {
-        // Add the offer to chat
-        const messages = document.getElementById('negotiationMessages');
-        messages.innerHTML += `
-            <div class="list-group-item">
-                <strong>You:</strong> Offered ৳${offeredPrice.toFixed(2)}
-            </div>
-        `;
-        
-        // Add bot response
-        messages.innerHTML += `
-            <div class="list-group-item">
-                <strong>Bot:</strong> ${data.message}
-            </div>
-        `;
-        
-        if (data.status === 'success') {
-            if (data.decision === 'accept') {
-                messages.innerHTML += `
-                    <div class="list-group-item bg-success text-white">
-                        <strong>Success!</strong> Offer accepted at ৳${data.final_price.toFixed(2)}
-                    </div>
-                `;
-                // Enable add to cart with negotiated price
-                document.getElementById('negotiationOffer').disabled = true;
-                document.getElementById('submitNegotiation').disabled = true;
-                
-                // Add an "Add to Cart" button
-                const addToCartBtn = document.createElement('button');
-                addToCartBtn.className = 'btn btn-primary mt-3';
-                addToCartBtn.textContent = 'Add to Cart';
-                addToCartBtn.onclick = function() {
-                    document.getElementById('cartProductId').value = productId;
-                    document.getElementById('cartProductName').textContent = document.getElementById('negotiateProductName').textContent;
-                    document.getElementById('cartProductPrice').value = data.final_price;
-                    
-                    // Close negotiation modal and open cart modal
-                    bootstrap.Modal.getInstance(document.getElementById('negotiationModal')).hide();
-                    new bootstrap.Modal(document.getElementById('addToCartModal')).show();
-                };
-                messages.appendChild(addToCartBtn);
-            } else if (data.decision === 'counter') {
-                // Add counter offer suggestion
-                messages.innerHTML += `
-                    <div class="list-group-item bg-info text-white">
-                        <strong>Counter Offer:</strong> ৳${data.counter_offer.toFixed(2)}
-                    </div>
-                `;
-            } else if (data.decision === 'reject') {
-                messages.innerHTML += `
-                    <div class="list-group-item bg-danger text-white">
-                        <strong>Rejected:</strong> Offer too low
-                    </div>
-                `;
-            }
-        } else {
-            alert(data.message || 'Error processing your offer');
-        }
-        
-        // Scroll to bottom of chat
-        messages.scrollTop = messages.scrollHeight;
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        alert('Error processing your offer');
-    });
-});
-
-document.addEventListener('DOMContentLoaded', function() {
-    // Direct add to cart handling
-    document.querySelectorAll('.add-to-cart').forEach(button => {
-        button.addEventListener('click', function() {
-            const productId = this.dataset.productId;
-            const productName = this.dataset.productName;
-            const productPrice = this.dataset.price;
-            
-            // Show add to cart modal
-            document.getElementById('cartProductId').value = productId;
-            document.getElementById('cartProductName').textContent = productName;
-            document.getElementById('cartQuantity').value = '1';
-            new bootstrap.Modal(document.getElementById('addToCartModal')).show();
-        });
-    });
-
-    // Handle add to cart confirmation
-    document.getElementById('confirmAddToCart').addEventListener('click', function() {
-        const button = this;
-        const productId = document.getElementById('cartProductId').value;
-        const quantity = parseInt(document.getElementById('cartQuantity').value);
-        
-        if (!productId || isNaN(quantity) || quantity < 1) {
-            alert('Please enter a valid quantity');
-            return;
-        }
-        
-        button.disabled = true;
-        
-        fetch('/api/add', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                product_id: productId,
-                quantity: quantity
-            })
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.status === 'success') {
-                updateCartCount(quantity);
-                
-                // Show success toast
-                const toast = new bootstrap.Toast(document.getElementById('addToCartToast'));
-                document.querySelector('#addToCartToast .toast-body').textContent = 'Item added to cart successfully!';
-                toast.show();
-                
-                // Close modal
-                bootstrap.Modal.getInstance(document.getElementById('addToCartModal')).hide();
-            } else {
-                throw new Error(data.message || 'Failed to add item to cart');
+                cartCountElement.style.display = newCount > 0 ? 'inline' : 'none';
             }
         })
-        .catch(error => {
-            console.error('Error:', error);
-            alert(error.message || 'Error adding item to cart');
-        })
-        .finally(() => {
-            button.disabled = false;
-        });
-    });
-});
-
-function updateCartCount(change = 0) {
-    const cartCountElement = document.getElementById('cartCount');
-    if (cartCountElement) {
-        const currentCount = parseInt(cartCountElement.textContent || '0');
-        const newCount = currentCount + change;
-        cartCountElement.textContent = newCount;
-        cartCountElement.style.display = newCount > 0 ? 'inline' : 'none';
-    }
+        .catch(error => console.error('Error updating cart count:', error));
 }
-
-// Initialize add to cart buttons
-document.addEventListener('DOMContentLoaded', function() {
-    // Handle add to cart confirmation
-    document.getElementById('confirmAddToCart').addEventListener('click', function() {
-        const productId = document.getElementById('cartProductId').value;
-        const quantity = parseInt(document.getElementById('cartQuantity').value);
-        
-        if (!productId || isNaN(quantity) || quantity < 1) {
-            alert('Please enter a valid quantity');
-            return;
-        }
-        
-        const button = this;
-        button.disabled = true;
-        
-        fetch('/api/add', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                product_id: productId,
-                quantity: quantity
-            })
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.status === 'success') {
-                updateCartCount(quantity);
-                
-                // Show success toast
-                const toast = new bootstrap.Toast(document.getElementById('addToCartToast'));
-                document.querySelector('#addToCartToast .toast-body').textContent = 'Item added to cart successfully!';
-                toast.show();
-                
-                // Close modal
-                bootstrap.Modal.getInstance(document.getElementById('addToCartModal')).hide();
-            } else {
-                throw new Error(data.message || 'Failed to add item to cart');
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            alert(error.message || 'Error adding item to cart');
-        })
-        .finally(() => {
-            button.disabled = false;
-        });
-    });
-});
 </script>
 {% endblock %}

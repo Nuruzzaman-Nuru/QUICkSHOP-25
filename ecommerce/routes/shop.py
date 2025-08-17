@@ -3,10 +3,11 @@ from flask_login import login_required, current_user
 from sqlalchemy import func, or_, desc, asc, String
 from functools import wraps
 from werkzeug.utils import secure_filename
+from datetime import datetime
 import os
 from ..models.shop import Shop, Product
 from ..models.user import User
-from ..models.order import Order
+from ..models.order import Order, OrderItem, OrderNote
 from ..utils.notifications import notify_customer_order_status, notify_admin_order_status, notify_delivery_person_new_order
 from .. import db
 
@@ -98,11 +99,11 @@ def create():
     if request.method == 'POST':
         name = request.form.get('name')
         description = request.form.get('description')
-        address = request.form.get('address')
+        address = request.form.get('address', '')
         lat = request.form.get('latitude')
         lng = request.form.get('longitude')
         
-        if not all([name, description, address]):
+        if not all([name, description]):
             flash('Please fill in all required fields.', 'error')
             return redirect(url_for('shop.create'))
             
@@ -209,7 +210,14 @@ def order_details(order_id):
     if order.shop_id != current_user.shop.id:
         flash('Access denied.', 'error')
         return redirect(url_for('shop.orders'))
-    return render_template('shop/order_details.html', order=order)
+    order_status_colors = {
+        'pending': 'warning',
+        'confirmed': 'info',
+        'delivering': 'primary',
+        'completed': 'success',
+        'cancelled': 'danger'
+    }
+    return render_template('shop/order_details.html', order=order, order_status_colors=order_status_colors)
 
 @shop_bp.route('/order/<int:order_id>/update-status', methods=['POST'])
 @login_required
@@ -259,6 +267,35 @@ def update_order_status(order_id):
             'status': 'error',
             'message': 'An error occurred while updating order status'
         }), 500
+
+@shop_bp.route('/order/<int:order_id>/notes', methods=['POST'])
+@login_required
+@shop_owner_required
+def add_order_note(order_id):
+    order = Order.query.get_or_404(order_id)
+    
+    # Verify shop ownership
+    if order.shop_id != current_user.shop.id:
+        flash('Access denied.', 'error')
+        return redirect(url_for('shop.orders'))
+    
+    note = request.form.get('note')
+    if note:
+        try:
+            new_note = OrderNote(
+                order_id=order.id,
+                user_id=current_user.id, 
+                content=note
+            )
+            db.session.add(new_note)
+            db.session.commit()
+            flash('Note added successfully.', 'success')
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f'Error adding note: {str(e)}')
+            flash('Error adding note.', 'error')
+    
+    return redirect(url_for('shop.order_details', order_id=order_id))
 
 @shop_bp.route('/settings', methods=['GET', 'POST'])
 @login_required
@@ -588,3 +625,23 @@ def edit_contact(shop_id):
             current_app.logger.error(f'Error updating shop contact info: {str(e)}')
     
     return render_template('shop/edit_contact.html', shop=shop)
+
+@shop_bp.route('/<int:shop_id>/products/<int:product_id>')
+def product(shop_id, product_id):
+    shop = Shop.query.get_or_404(shop_id)
+    product = Product.query.get_or_404(product_id)
+    
+    if product.shop_id != shop_id:
+        abort(404)  # Product doesn't belong to this shop
+    
+    # Get related products from the same shop and category
+    related_products = Product.query.filter(
+        Product.shop_id == shop_id,
+        Product.category == product.category,
+        Product.id != product_id
+    ).limit(4).all()
+    
+    return render_template('shop/product_details.html',
+                         shop=shop,
+                         product=product,
+                         related_products=related_products)

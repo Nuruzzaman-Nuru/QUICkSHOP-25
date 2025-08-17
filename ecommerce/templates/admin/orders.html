@@ -54,7 +54,7 @@
                             </thead>
                             <tbody>
                                 {% for order in orders %}
-                                    <tr>
+                                    <tr id="order-{{ order.id }}">
                                         <td>#{{ order.id }}</td>
                                         <td>{{ order.customer.username }}</td>
                                         <td>{{ order.shop.name }}</td>
@@ -81,11 +81,21 @@
                                         </td>
                                         <td>{{ order.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
                                         <td>
-                                            <div class="btn-group">
+                                            <div class="btn-group">                                                
                                                 <button type="button" class="btn btn-sm btn-info view-details"
                                                         data-order-id="{{ order.id }}">
                                                     Details
                                                 </button>
+                                                {% if order.status == 'pending' %}
+                                                    <button type="button" class="btn btn-sm btn-success confirm-order"
+                                                            data-order-id="{{ order.id }}">
+                                                        Confirm Order
+                                                    </button>
+                                                    <button type="button" class="btn btn-sm btn-danger cancel-order"
+                                                            data-order-id="{{ order.id }}">
+                                                        Cancel Order
+                                                    </button>
+                                                {% endif %}
                                                 {% if order.status == 'in_delivery' %}
                                                     <button type="button" class="btn btn-sm btn-success track-delivery"
                                                             data-order-id="{{ order.id }}">
@@ -125,6 +135,43 @@
 
 {% block scripts %}
 <script>
+// Helper function to update order status in UI
+function updateOrderStatus(orderId, status) {
+    const row = document.getElementById(`order-${orderId}`);
+    if (!row) return;
+    
+    // Update status badge
+    const statusCell = row.querySelector('td:nth-child(5)');
+    if (statusCell) {
+        const badge = statusCell.querySelector('.badge');
+        if (badge) {
+            badge.className = `badge bg-${
+                status === 'confirmed' ? 'info' : 
+                status === 'cancelled' ? 'danger' : 
+                status === 'delivered' ? 'success' : 
+                'primary'
+            }`;
+            badge.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+        }
+    }
+
+    // Update delivery person cell
+    const deliveryCell = row.querySelector('td:nth-child(6)');
+    if (deliveryCell) {
+        deliveryCell.innerHTML = '-';
+    }
+
+    // Update actions cell
+    const actionsCell = row.querySelector('td:last-child');
+    if (actionsCell) {
+        actionsCell.querySelector('.btn-group').innerHTML = `
+            <button type="button" class="btn btn-sm btn-info view-details" data-order-id="${orderId}">
+                Details
+            </button>
+        `;
+    }
+}
+
 document.querySelectorAll('.assign-delivery').forEach(button => {
     button.addEventListener('click', function() {
         const orderId = this.dataset.orderId;
@@ -180,6 +227,90 @@ document.querySelectorAll('.track-delivery').forEach(button => {
     button.addEventListener('click', function() {
         const orderId = this.dataset.orderId;
         window.open(`/user/track-order/${orderId}`, '_blank');
+    });
+});
+
+// Handle order confirmation
+document.querySelectorAll('.confirm-order').forEach(button => {
+    button.addEventListener('click', function() {
+        const orderId = this.dataset.orderId;
+        if (!confirm('Are you sure you want to confirm this order? This will send an SMS to the customer.')) {
+            return;
+        }
+
+        const button = this;
+        const originalHtml = button.innerHTML;
+        button.disabled = true;
+        button.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Confirming...';
+
+        // Optimistically update UI
+        updateOrderStatus(orderId, 'confirmed');
+        showSuccessMessage('Order confirmed successfully');
+
+        fetch(`/admin/order/${orderId}/confirm`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': '{{ csrf_token() }}'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                if (data.sms_sent) {
+                    showSuccessMessage('SMS sent to customer');
+                } else {
+                    showErrorMessage('SMS could not be sent');
+                }
+            } else {
+                throw new Error(data.message);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showErrorMessage(error.message || 'Failed to confirm order');
+            // Revert optimistic update
+            window.location.reload();
+        });
+    });
+});
+
+// Handle order cancellation
+document.querySelectorAll('.cancel-order').forEach(button => {
+    button.addEventListener('click', function() {
+        const orderId = this.dataset.orderId;
+        if (!confirm('Are you sure you want to cancel this order? This cannot be undone.')) {
+            return;
+        }
+
+        const button = this;
+        const originalHtml = button.innerHTML;
+        button.disabled = true;
+        button.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Cancelling...';
+
+        // Optimistically update UI
+        updateOrderStatus(orderId, 'cancelled');
+        showSuccessMessage('Order cancelled successfully');
+
+        fetch(`/admin/order/${orderId}/cancel`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': '{{ csrf_token() }}'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status !== 'success') {
+                throw new Error(data.message);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showErrorMessage(error.message || 'Failed to cancel order');
+            // Revert optimistic update
+            window.location.reload();
+        });
     });
 });
 </script>

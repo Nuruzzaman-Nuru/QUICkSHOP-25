@@ -1,0 +1,133 @@
+from flask import Blueprint, render_template, redirect, url_for, flash, request, current_app, session
+from flask_login import login_user, logout_user, login_required, current_user
+from flask_wtf.csrf import generate_csrf
+from werkzeug.security import generate_password_hash
+from functools import wraps
+from ..models.user import User
+from .. import db
+import secrets
+from datetime import datetime, timedelta
+
+auth_bp = Blueprint('auth', __name__)
+
+# Helper functions
+def role_required(*roles):
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            if not current_user.is_authenticated or current_user.role not in roles:
+                flash('Access denied.', 'error')
+                return redirect(url_for('auth.login'))
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
+
+def admin_required(f):
+    return role_required('admin')(f)
+
+def shop_owner_required(f):
+    return role_required('shop_owner')(f)
+
+def delivery_required(f):
+    return role_required('delivery')(f)
+
+def customer_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not current_user.is_authenticated or current_user.role != 'user':
+            flash('Access denied. This feature is only available for customers.', 'error')
+            return redirect(url_for('main.index'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+def get_role_dashboard(role):
+    """Helper function to redirect users to their appropriate dashboard"""
+    dashboards = {
+        'admin': 'admin.dashboard',
+        'shop_owner': 'shop.dashboard',
+        'delivery': 'delivery.dashboard',
+        'user': 'user.dashboard'
+    }
+    return url_for(dashboards.get(role, 'main.index'))
+
+@auth_bp.route('/register', methods=['GET', 'POST'])
+def register():
+    # Clear any existing flash messages
+    session.pop('_flashes', None)
+    
+    if request.method == 'POST':
+        username = request.form.get('username')
+        email = request.form.get('email')
+        password = request.form.get('password')
+        confirm_password = request.form.get('confirm_password')
+        role = request.form.get('role')
+        phone = request.form.get('phone')
+        address = request.form.get('address')
+        
+        # Validate role selection
+        allowed_roles = ['user', 'shop_owner', 'delivery']
+        if not role or role not in allowed_roles:
+            flash('Please select a valid role.', 'error')
+            return render_template('auth/register.html')
+
+        # Validate required fields
+        if not all([username, email, password, confirm_password, phone, address]):
+            flash('All fields are required.', 'error')
+            return render_template('auth/register.html')
+
+        # Validate password match
+        if password != confirm_password:
+            flash('Passwords do not match.', 'error')
+            return render_template('auth/register.html')
+
+        # Check if username or email already exists
+        if User.query.filter_by(username=username).first():
+            flash('Username already exists.', 'error')
+            return render_template('auth/register.html')
+
+        if User.query.filter_by(email=email).first():
+            flash('Email already registered.', 'error')
+            return render_template('auth/register.html')
+
+        try:
+            # Create new user
+            user = User(username=username, email=email, role=role)
+            user.set_password(password)
+            user.phone = phone
+            user.address = address
+            user.created_at = datetime.utcnow()
+            
+            db.session.add(user)
+            db.session.commit()
+
+            # Clear any existing messages before showing success
+            session.pop('_flashes', None)
+            
+            # Generate confirmation message with user details
+            confirmation_msg = f"""
+            <div class='registration-details'>
+                <h4>Registration Successful!</h4>
+                <div class='info-box p-3 bg-light rounded'>
+                    <p><strong>User ID:</strong> #{user.id}</p>
+                    <p><strong>Username:</strong> {user.username}</p>
+                    <p><strong>Password:</strong> {password}</p>
+                </div>
+                <p class='mt-3'><strong>Please save these details for future reference.</strong></p>
+                <p class='text-muted'>You will be redirected to the login page in a few seconds...</p>
+            </div>
+            """
+            flash(confirmation_msg, 'success')
+            
+            # Store user ID in session for login page
+            session['registered_user_id'] = user.id
+            
+            # Return success response
+            return render_template('auth/register_success.html')
+            
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f'Registration error: {str(e)}')
+            flash('Error creating account. Please try again.', 'error')
+            return render_template('auth/register.html')
+    
+    return render_template('auth/register.html')

@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block title %}Registration Successful - QuickShop{% endblock %}
+
+{% block content %}
+<div class="auth-section position-relative">
+    <img src="{{ url_for('static', filename='images/auth-bg.jpg') }}" alt="Auth Background" class="w-100 h-100 object-fit-cover position-absolute top-0 start-0">
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-md-6">
+                <div class="card auth-card">
+                    <div class="card-header bg-success text-white">
+                        <h3 class="text-center mb-0">
+                            <i class="bi bi-check-circle me-2"></i>Registration Successful
+                        </h3>
+                    </div>
+                    <div class="card-body px-4 py-4">
+                        <!-- Registration Details Section -->
+                        {% with messages = get_flashed_messages(with_categories=true) %}
+                            {% for category, message in messages %}
+                                {% if category == 'success' %}
+                                    <div class="alert alert-success border-0 shadow-sm">
+                                        {{ message | safe }}
+                                    </div>
+                                {% endif %}
+                            {% endfor %}
+                        {% endwith %}
+
+                        <!-- Login Form Section -->
+                        <div class="login-section mt-4">
+                            <h4 class="text-center mb-3">Login to Your Account</h4>
+                            <form method="POST" action="{{ url_for('auth.login') }}" class="needs-validation" novalidate>
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                
+                                <div class="mb-3">
+                                    <label for="user_id" class="form-label">User ID or Username</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text"><i class="bi bi-person"></i></span>
+                                        <input type="text" class="form-control" id="user_id" name="user_id" 
+                                               value="{{ '#' + session.get('registered_user_id', '')|string if session.get('registered_user_id') }}"
+                                               required>
+                                    </div>
+                                    <div class="invalid-feedback">Please enter your User ID or username.</div>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label for="password" class="form-label">Password</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text"><i class="bi bi-lock"></i></span>
+                                        <input type="password" class="form-control" id="password" name="password" required>
+                                        <button class="btn btn-outline-secondary" type="button" id="togglePassword">
+                                            <i class="bi bi-eye"></i>
+                                        </button>
+                                    </div>
+                                    <div class="invalid-feedback">Please enter your password.</div>
+                                </div>
+                                
+                                <div class="mb-3 form-check">
+                                    <input type="checkbox" class="form-check-input" id="remember" name="remember">
+                                    <label class="form-check-label" for="remember">Remember me</label>
+                                </div>
+                                
+                                <button type="submit" class="btn btn-primary w-100">
+                                    <i class="bi bi-box-arrow-in-right me-2"></i>Login
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Remove any close buttons from alerts
+    document.querySelectorAll('.alert .btn-close').forEach(btn => btn.remove());
+    
+    // Toggle password visibility
+    const togglePassword = document.querySelector('#togglePassword');
+    const password = document.querySelector('#password');
+    
+    togglePassword.addEventListener('click', function (e) {
+        const type = password.getAttribute('type') === 'password' ? 'text' : 'password';
+        password.setAttribute('type', type);
+        this.querySelector('i').classList.toggle('bi-eye');
+        this.querySelector('i').classList.toggle('bi-eye-slash');
+    });
+
+    // Bootstrap form validation
+    const forms = document.querySelectorAll('.needs-validation');
+    Array.from(forms).forEach(form => {
+        form.addEventListener('submit', event => {
+            if (!form.checkValidity()) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+            form.classList.add('was-validated');
+        }, false);
+    });
+});
+</script>
+{% endblock %}
