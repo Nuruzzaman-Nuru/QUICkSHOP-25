@@ -1,8 +1,27 @@
 {
+  "version": 2,
   "builds": [
-    { "src": "app.py", "use": "@vercel/python" }
+    {
+      "src": "api/index.py",
+      "use": "@vercel/python"
+    },
+    {
+      "src": "ecommerce/static/**",
+      "use": "@vercel/static"
+    }
   ],
   "routes": [
-    { "src": "/(.*)", "dest": "app.py" }
-  ]
+    {
+      "src": "/static/(.*)",
+      "dest": "/ecommerce/static/$1"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/api/index.py"
+    }
+  ],
+  "env": {
+    "PYTHONPATH": ".",
+    "FLASK_ENV": "production"
+  }
 }
