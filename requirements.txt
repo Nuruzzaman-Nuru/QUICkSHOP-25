@@ -1,1 +1,2 @@
-# No requirements needed for basic function
+flask==2.0.1
+Werkzeug==2.0.1
