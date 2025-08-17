@@ -2,14 +2,21 @@
     "version": 2,
     "builds": [
         {
-            "src": "/api/index.py",
+            "src": "run.py",
             "use": "@vercel/python"
         }
     ],
     "routes": [
         {
+            "src": "/static/(.*)",
+            "dest": "/static/$1"
+        },
+        {
             "src": "/(.*)",
-            "dest": "/api/index.py"
+            "dest": "run.py"
         }
-    ]
+    ],
+    "env": {
+        "FLASK_ENV": "production"
+    }
 }
