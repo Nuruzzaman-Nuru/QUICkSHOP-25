@@ -34,6 +34,10 @@ def create_app():
         featured_shops = Shop.query.filter_by(is_active=True).limit(6).all()
         return render_template('main/home.html', featured_shops=featured_shops)
 
+    @app.route('/health')
+    def health_check():
+        return 'OK', 200
+
     return app
 
 if __name__ == '__main__':
