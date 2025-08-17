@@ -2,7 +2,7 @@
     "version": 2,
     "builds": [
         {
-            "src": "/api/index.py",
+            "src": "api/index.py",
             "use": "@vercel/python",
             "config": {
                 "maxLambdaSize": "15mb",
@@ -13,14 +13,16 @@
     "routes": [
         {
             "src": "/static/(.*)",
-            "dest": "/ecommerce/static/$1"
-        },
-        {
-            "handle": "filesystem"
+            "dest": "ecommerce/static/$1"
         },
         {
             "src": "/(.*)",
-            "dest": "/api/index.py"
+            "dest": "api/index.py"
         }
-    ]
+    ],
+    "env": {
+        "PYTHONPATH": ".",
+        "FLASK_APP": "api/index.py",
+        "FLASK_ENV": "production"
+    }
 }
