@@ -1,12 +1,18 @@
 from flask import Flask
+import os
 from ecommerce import create_app
 
+# Create Flask app
 app = create_app()
 
-# This is required for Vercel serverless function
+# Configure app for Vercel
+app.config.update(
+    SECRET_KEY=os.environ.get('SECRET_KEY', 'default-secret-key'),
+    SQLALCHEMY_DATABASE_URI=os.environ.get('DATABASE_URL', 'sqlite:///ecommerce.db'),
+    SQLALCHEMY_TRACK_MODIFICATIONS=False
+)
+
+# For Vercel serverless functions
 def handler(request):
-    """Handle incoming requests."""
-    with app.test_client() as client:
-        # Forward the request to the Flask app
-        resp = client.get(request.url)
-        return resp.get_data(), resp.status_code, resp.headers.to_wsgi_list()
+    """Entry point for Vercel serverless function"""
+    return app
