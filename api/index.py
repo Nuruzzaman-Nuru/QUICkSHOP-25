@@ -1,22 +1,21 @@
-from flask import Flask
-import sys
+from flask import Flask, Response
 import os
 
-# Add the project root directory to Python path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+app = Flask(__name__)
+app.config.update(
+    SECRET_KEY=os.environ.get('SECRET_KEY', 'default-secret-key'),
+)
 
-from ecommerce import create_app
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
+def catch_all(path):
+    return "Hello from QuickShop!", 200
 
-# Create Flask app
-app = create_app()
-
-# For Vercel serverless functions
 def handler(request):
-    """Handle requests in Vercel serverless function"""
     with app.test_client() as test_client:
-        resp = test_client.get(request.get("path", "/"))
-        return {
-            "statusCode": resp.status_code,
-            "headers": dict(resp.headers),
-            "body": resp.get_data(as_text=True)
-        }
+        response = test_client.get(request.get("path", "/"))
+        return Response(
+            response.get_data(),
+            status=response.status_code,
+            headers=dict(response.headers)
+        )
