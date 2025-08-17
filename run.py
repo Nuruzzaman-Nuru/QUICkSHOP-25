@@ -2,8 +2,9 @@ from ecommerce import create_app
 
 app = create_app()
 
-# This is required for Vercel to find the app
+# These are required for WSGI servers to find the app
 application = app
+wsgi_app = app
 
 if __name__ == '__main__':
-    app.run()
+    app.run(host='0.0.0.0', port=3000)
