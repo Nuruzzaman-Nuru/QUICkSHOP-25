@@ -2,36 +2,40 @@ from flask import Flask, jsonify
 
 app = Flask(__name__)
 
-@app.route('/')
+@app.route('/', methods=['GET'])
 def home():
     return jsonify({
-        "message": "Welcome to QuickShop API!",
-        "status": "active"
+        "message": "Welcome to QuickShop!",
+        "status": "online"
     })
 
-@app.route('/api/test')
+@app.route('/api/test', methods=['GET'])
 def test():
     return jsonify({
-        "message": "API test endpoint working!"
+        "message": "API is working"
     })
 
+# Vercel serverless handler
 def handler(request):
-    """Handle requests in Vercel serverless function"""
+    if request is None:
+        # Handle direct Flask calls
+        return app
+        
     try:
-        with app.test_client() as test_client:
-            # Get the path from the request
-            path = request.get('path', '/')
-            
-            # Make the request to Flask app
-            response = test_client.get(path)
+        http_method = request.get('httpMethod', 'GET')
+        path = request.get('path', '/')
+        
+        with app.test_client() as client:
+            response = client.open(path, method=http_method)
             
             return {
-                "statusCode": response.status_code,
-                "headers": dict(response.headers),
-                "body": response.get_data(as_text=True)
+                'statusCode': response.status_code,
+                'headers': {'Content-Type': 'application/json'},
+                'body': response.get_data(as_text=True)
             }
+            
     except Exception as e:
         return {
-            "statusCode": 500,
-            "body": str(e)
+            'statusCode': 500,
+            'body': str(e)
         }
