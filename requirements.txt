@@ -1,2 +1,5 @@
-# This file is intentionally empty
-# We don't need any requirements for a basic function
+flask==2.0.1
+Flask-SQLAlchemy==2.5.1
+Flask-Login==0.5.0
+Werkzeug==2.0.1
+python-dotenv==0.19.0
