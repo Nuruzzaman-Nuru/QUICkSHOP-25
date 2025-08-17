@@ -1,6 +1,11 @@
 from flask import Flask
-from app import app
 
-# For Vercel Serverless Function
-def handler(request):
-    return app
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return 'Hello from QuickShop!'
+
+@app.route('/api/test')
+def test():
+    return {"message": "API is working!"}
